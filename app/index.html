@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공포탐욕 수익률 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">S&amp;P 500 · 1980 – 2026</p>
+    <h1>공포탐욕지수로 보는<br>1년 후 수익률</h1>
+    <p class="standfirst">
+      CNN Fear &amp; Greed Index 점수를 넣으면, 과거 같은 점수대에서 실제로 나온
+      이후 1년 수익률의 분포를 보여줍니다. 예측이 아니라 <em>기록</em>입니다.
+    </p>
+    <dl class="masthead-facts">
+      <div><dt>관측 표본</dt><dd id="fact-obs">–</dd></div>
+      <div><dt>기간</dt><dd id="fact-range">–</dd></div>
+      <div><dt>오늘 지수</dt><dd id="fact-latest">–</dd></div>
+    </dl>
+  </header>
+
+  <section class="console" aria-labelledby="console-h">
+    <h2 id="console-h" class="sr-only">점수 입력</h2>
+
+    <div class="score-input">
+      <label for="score-number">공포탐욕지수</label>
+      <div class="score-row">
+        <input id="score-number" type="number" min="0" max="100" step="1" value="50"
+               inputmode="numeric" aria-describedby="score-cat">
+        <span id="score-cat" class="cat-chip">–</span>
+      </div>
+      <input id="score-range" type="range" min="0" max="100" step="1" value="50"
+             aria-label="공포탐욕지수 슬라이더">
+      <div class="scale-ends"><span>0 · 극단적 공포</span><span>극단적 탐욕 · 100</span></div>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="options">
+      <fieldset>
+        <legend>보유 기간</legend>
+        <div class="seg" id="opt-hz" role="group"></div>
+      </fieldset>
+      <fieldset>
+        <legend>수익률 기준</legend>
+        <div class="seg" id="opt-ret" role="group"></div>
+      </fieldset>
+      <fieldset>
+        <legend>데이터 범위</legend>
+        <div class="seg" id="opt-range" role="group"></div>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="verdict" aria-live="polite">
+    <div class="hero">
+      <p class="hero-label" id="hero-label">평균 수익률</p>
+      <p class="hero-value" id="hero-value">–</p>
+      <p class="hero-note" id="hero-note">–</p>
+    </div>
+    <div class="tiles">
+      <div class="tile"><p class="tile-label">중앙값</p><p class="tile-value" id="t-median">–</p><p class="tile-sub">표본의 한가운데</p></div>
+      <div class="tile"><p class="tile-label">상승 확률</p><p class="tile-value" id="t-win">–</p><p class="tile-sub">플러스로 끝난 비율</p></div>
+      <div class="tile"><p class="tile-label">흔한 범위</p><p class="tile-value" id="t-band">–</p><p class="tile-sub">하위 10% ~ 상위 10%</p></div>
+      <div class="tile"><p class="tile-label">표본 수</p><p class="tile-value" id="t-n">–</p><p class="tile-sub">±5점 구간의 거래일</p></div>
+    </div>
+    <p class="reading" id="reading">–</p>
+  </section>
+
+  <section class="chart-block">
+    <div class="chart-head">
+      <h2>점수별 평균 수익률 곡선</h2>
+      <p class="chart-sub" id="curve-sub">–</p>
+    </div>
+    <div class="legend" id="curve-legend"></div>
+    <div class="chart-shell" id="curve-shell"></div>
+    <p class="caption" id="curve-caption">–</p>
+  </section>
+
+  <div class="chart-duo">
+    <section class="chart-block">
+      <div class="chart-head">
+        <h2>선택 구간의 결과 분포</h2>
+        <p class="chart-sub" id="hist-sub">–</p>
+      </div>
+      <div class="chart-shell" id="hist-shell"></div>
+      <p class="caption">주간 표본 기준. 세로선은 해당 구간의 중앙값입니다.</p>
+    </section>
+
+    <section class="chart-block">
+      <div class="chart-head">
+        <h2>모든 관측치</h2>
+        <p class="chart-sub" id="scatter-sub">–</p>
+      </div>
+      <div class="chart-shell" id="scatter-shell"></div>
+      <p class="caption">점 하나가 한 주(週)입니다. 진한 점이 선택한 점수 ±5 구간.</p>
+    </section>
+  </div>
+
+  <section class="chart-block">
+    <div class="chart-head">
+      <h2>이 점수가 나왔던 시기</h2>
+      <p class="chart-sub" id="timeline-sub">–</p>
+    </div>
+    <div class="chart-shell" id="timeline-shell"></div>
+    <p class="caption" id="timeline-caption">–</p>
+  </section>
+
+  <section class="table-block">
+    <div class="chart-head">
+      <h2>구간별 기록</h2>
+      <p class="chart-sub" id="table-sub">–</p>
+    </div>
+    <div class="table-scroll">
+      <table id="bucket-table">
+        <caption class="sr-only">공포탐욕지수 10점 구간별 이후 수익률 통계</caption>
+        <thead>
+          <tr><th scope="col">구간</th><th scope="col">표본</th><th scope="col">평균</th>
+              <th scope="col">중앙값</th><th scope="col">상승 확률</th>
+              <th scope="col">최악</th><th scope="col">최고</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="table-scroll">
+      <table id="cat-table">
+        <caption class="sr-only">CNN 5단계 구간별 이후 수익률 통계</caption>
+        <thead>
+          <tr><th scope="col">CNN 단계</th><th scope="col">표본</th><th scope="col">평균</th>
+              <th scope="col">중앙값</th><th scope="col">상승 확률</th>
+              <th scope="col">최악</th><th scope="col">최고</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="episodes">
+    <div class="chart-head">
+      <h2>기억할 만한 사례</h2>
+      <p class="chart-sub" id="ep-sub">–</p>
+    </div>
+    <ul class="episode-list" id="episode-list"></ul>
+  </section>
+
+  <section class="method">
+    <h2>이 숫자는 어떻게 만들어졌나</h2>
+    <div class="method-grid">
+      <article>
+        <h3>1. 지수</h3>
+        <p id="m-index">–</p>
+      </article>
+      <article>
+        <h3>2. 수익률</h3>
+        <p>매 거래일을 하나의 관측치로 보고, 그날로부터 정확히 1년(달력 기준) 뒤 S&amp;P 500
+           종가와 비교했습니다. 배당 포함을 선택하면 Shiller 배당 시계열로 재투자 수익을 더합니다.
+           3년은 연평균(CAGR)으로 환산합니다.</p>
+      </article>
+      <article>
+        <h3>3. 집계</h3>
+        <p id="m-agg">–</p>
+      </article>
+      <article class="warn">
+        <h3>4. 한계 — 꼭 읽어주세요</h3>
+        <ul>
+          <li><strong>관측치가 겹칩니다.</strong> 매일 계산한 1년 수익률은 서로 364일을 공유합니다.
+              표본 수가 1,000개라도 독립적인 사건은 4년치뿐입니다.</li>
+          <li><strong>극단 구간은 표본이 얇습니다.</strong> 90점 이상은 45년 통틀어 1년 남짓입니다.
+              사실상 몇 번의 사건이 평균을 만듭니다.</li>
+          <li><strong>2011년 이전은 복원값입니다.</strong> CNN 지수는 2011년에 시작했습니다.
+              그 이전은 가격·변동성으로 만든 대체 지수이며, 겹치는 기간 상관계수는
+              <span id="m-corr">–</span>입니다.</li>
+          <li><strong>미래 보장이 아닙니다.</strong> 45년 중 대부분이 강세장이었고,
+              어느 구간이든 평균은 플러스로 나옵니다. 투자 판단의 근거로 쓰기엔 표본이 부족합니다.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <p id="foot-sources">–</p>
+    <p class="disclaimer">교육·연구 목적의 과거 통계입니다. 투자 자문이 아닙니다.</p>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip" hidden role="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

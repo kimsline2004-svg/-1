@@ -10,12 +10,16 @@
   var PANEL = [];
   var tip = document.getElementById("tooltip");
 
-  var state = { rate: 4.6, basis: "nom", win: 0.5, hz: "h5", era: "e1953" };
+  var state = { rate: 4.6, asset: "stock", basis: "nom", win: 0.5, hz: "5", era: "e1953" };
 
+  var ASSETS = [
+    { id: "stock", tag: "s", label: "S&P 500", word: "S&P 500 주식", short: "주식" },
+    { id: "bond", tag: "b", label: "10년 국채", word: "10년 국채", short: "국채" }
+  ];
   var HZ = [
-    { id: "h1", label: "1년", word: "1년 후" },
-    { id: "h3", label: "3년", word: "3년 후" },
-    { id: "h5", label: "5년", word: "5년 후" }
+    { id: "1", label: "1년", word: "1년 후" },
+    { id: "3", label: "3년", word: "3년 후" },
+    { id: "5", label: "5년", word: "5년 후" }
   ];
   var BASIS = [
     { id: "nom", label: "명목", word: "명목" },
@@ -61,6 +65,11 @@
     return n;
   }
 
+  function pick(list, id) {
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return list[0];
+  }
+
   function minus(s) { return s.replace(/-/g, "−"); }
 
   function pct(v, digits) {
@@ -74,7 +83,10 @@
     return v >= 0 ? "pos" : "neg";
   }
 
-  function key(hz) { return hz + (state.basis === "real" ? "r" : ""); }
+  /* 패널의 열 이름: 자산(s/b) + 기간(1/3/5) + 실질이면 r */
+  function key(assetId, hz) {
+    return pick(ASSETS, assetId).tag + hz + (state.basis === "real" ? "r" : "");
+  }
 
   function monthKo(m) { return m.slice(0, 4) + "년 " + String(Number(m.slice(5))) + "월"; }
 
@@ -92,8 +104,8 @@
   }
 
   /* 시작 금리가 test를 통과한 달들의 이후 수익률 통계 */
-  function collect(eraFrom, hz, test) {
-    var k = key(hz), vals = [], best = null, worst = null, i, row, v;
+  function collect(eraFrom, assetId, hz, test) {
+    var k = key(assetId, hz), vals = [], best = null, worst = null, i, row, v;
     for (i = 0; i < PANEL.length; i++) {
       row = PANEL[i];
       if (row.m < eraFrom) continue;
@@ -112,8 +124,6 @@
       n: vals.length,
       mean: mean(vals),
       median: quantile(sorted, 0.5),
-      p10: quantile(sorted, 0.1),
-      p90: quantile(sorted, 0.9),
       best: best,
       worst: worst,
       up: up / vals.length
@@ -121,17 +131,32 @@
   }
 
   /* 입력 금리 ± 폭 */
-  function stats(eraFrom, hz, rate, win) {
-    return collect(eraFrom, hz, function (y) { return Math.abs(y - rate) <= win + 1e-9; });
+  function stats(eraFrom, assetId, hz, rate, win) {
+    return collect(eraFrom, assetId, hz, function (y) { return Math.abs(y - rate) <= win + 1e-9; });
   }
 
   /* 구간 [lo, hi) — 경계에 걸친 달이 두 줄에 겹쳐 세어지지 않게 한쪽만 닫는다 */
-  function bucketStats(eraFrom, hz, lo, hi) {
-    return collect(eraFrom, hz, function (y) { return y >= lo && y < hi; });
+  function bucketStats(eraFrom, assetId, hz, lo, hi) {
+    return collect(eraFrom, assetId, hz, function (y) { return y >= lo && y < hi; });
   }
 
-  function correlation(hz, eraFrom) {
-    var k = key(hz), xs = [], ys = [], i, row;
+  /* 표본이 몇 개의 연속된 국면에서 나왔는지 — 겹치는 관측치의 실체를 보여준다 */
+  function runsOf(eraFrom, rate, win) {
+    var runs = [], prev = -2, i, row;
+    for (i = 0; i < PANEL.length; i++) {
+      row = PANEL[i];
+      if (row.m < eraFrom) continue;
+      if (Math.abs(row.y - rate) > win + 1e-9) continue;
+      if (i !== prev + 1) runs.push({ from: row.m, to: row.m, n: 0 });
+      runs[runs.length - 1].to = row.m;
+      runs[runs.length - 1].n++;
+      prev = i;
+    }
+    return runs;
+  }
+
+  function correlation(assetId, hz, eraFrom) {
+    var k = key(assetId, hz), xs = [], ys = [], i, row;
     for (i = 0; i < PANEL.length; i++) {
       row = PANEL[i];
       if (row.m < eraFrom || row[k] === undefined) continue;
@@ -144,6 +169,14 @@
       sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
     }
     return sxy / Math.sqrt(sxx * syy);
+  }
+
+  function overallMean(assetId, hz, eraFrom) {
+    var k = key(assetId, hz), vals = [], i;
+    for (i = 0; i < PANEL.length; i++) {
+      if (PANEL[i].m >= eraFrom && PANEL[i][k] !== undefined) vals.push(PANEL[i][k]);
+    }
+    return vals.length ? mean(vals) : null;
   }
 
   /* ------------------------------------------------------------ chrome */
@@ -160,6 +193,7 @@
   }
 
   function buildControls() {
+    seg($("opt-asset"), ASSETS, state.asset, function (id) { state.asset = id; render(); });
     seg($("opt-basis"), BASIS, state.basis, function (id) { state.basis = id; render(); });
     seg($("opt-window"), WINDOWS, state.win, function (id) { state.win = id; render(); });
     seg($("opt-hz"), HZ, state.hz, function (id) { state.hz = id; render(); });
@@ -202,24 +236,27 @@
   }
 
   function renderVerdict() {
-    var hz = HZ.filter(function (h) { return h.id === state.hz; })[0];
+    var hz = pick(HZ, state.hz), asset = pick(ASSETS, state.asset);
     var parts = ERAS.map(function (era) {
-      var s = stats(era.from, state.hz, state.rate, state.win);
+      var s = stats(era.from, state.asset, state.hz, state.rate, state.win);
       if (!s.n) return era.label + " 표본 없음";
       return era.label + " <span class=\"num " + signClass(s.mean) + "\">" + pct(s.mean) +
              "</span> <span class=\"num\">(" + s.n + "개월)</span>";
     });
     $("verdict").innerHTML =
       "금리 <strong class=\"num\">" + state.rate.toFixed(2) + "%</strong> 안팎(±" +
-      state.win + "%p)에서 시작한 달의 <strong>" + hz.word + "</strong> " +
-      BASIS.filter(function (b) { return b.id === state.basis; })[0].word +
-      " 연평균 총수익률 — " + parts.join(", ") + ".";
+      state.win + "%p)에서 시작한 달의 <strong>" + hz.word + " " + asset.word + "</strong> " +
+      pick(BASIS, state.basis).word + " 연평균 총수익률 — " + parts.join(", ") + ".";
   }
 
   /* -------------------------------------------------------------- eras */
+  function other(assetId) { return assetId === "stock" ? "bond" : "stock"; }
+
   function renderEras() {
     var host = $("era-grid");
     host.textContent = "";
+    var otherAsset = pick(ASSETS, other(state.asset));
+
     ERAS.forEach(function (era) {
       var card = document.createElement("article");
       card.className = "era";
@@ -237,16 +274,30 @@
       var h3 = document.createElement("h3");
       h3.textContent = era.name;
       head.appendChild(h3);
+
+      /* 표본이 몇 개의 국면에서 나왔는지를 카드마다 한 줄로 밝힌다 */
+      var runs = runsOf(era.from, state.rate, state.win);
       var sub = document.createElement("div");
       sub.className = "era-sub";
-      sub.textContent = era.from.replace("-", ".") + " – " + DATA.meta.last.replace("-", ".");
+      if (!runs.length) {
+        sub.textContent = "이 금리대가 없었던 기간";
+      } else {
+        var years = [];
+        runs.forEach(function (r) {
+          var y = r.from.slice(0, 4);
+          if (years[years.length - 1] !== y) years.push(y);
+        });
+        var shown = years.slice(0, 4).join(", ") + (years.length > 4 ? " …" : "");
+        sub.textContent = runs.length + "개 국면 · " + shown + "년에 시작";
+      }
       head.appendChild(sub);
       card.appendChild(head);
 
       var rows = document.createElement("div");
       rows.className = "hz-rows";
       HZ.forEach(function (h) {
-        var s = stats(era.from, h.id, state.rate, state.win);
+        var s = stats(era.from, state.asset, h.id, state.rate, state.win);
+        var o = stats(era.from, other(state.asset), h.id, state.rate, state.win);
         var row = document.createElement("div");
         row.className = "hz" + (s.n ? "" : " empty");
 
@@ -264,17 +315,20 @@
         m1.className = "hz-meta";
         var m2 = document.createElement("div");
         m2.className = "hz-meta";
+        var m3 = document.createElement("div");
+        m3.className = "hz-meta";
         if (s.n) {
-          m1.innerHTML = "중앙값 " + pct(s.median) + " · 플러스 " +
-                         Math.round(s.up * 100) + "%";
-          m2.innerHTML = minus("최저 " + pct(s.worst.v) + " ~ 최고 " + pct(s.best.v)) +
-                         " · " + s.n + "개월";
+          m1.textContent = "중앙값 " + pct(s.median) + " · 플러스 " +
+                           Math.round(s.up * 100) + "% · " + s.n + "개월";
+          m2.textContent = minus("최저 " + pct(s.worst.v) + " ~ 최고 " + pct(s.best.v));
+          m3.textContent = o.n ? "같은 조건 " + otherAsset.short + " " + pct(o.mean) : "";
+          m3.className = "hz-meta compare";
         } else {
           m1.textContent = "이 기간에 이 금리대가 없었습니다";
-          m2.textContent = "";
         }
         row.appendChild(m1);
         row.appendChild(m2);
+        row.appendChild(m3);
         rows.appendChild(row);
       });
       card.appendChild(rows);
@@ -314,44 +368,52 @@
     });
   }
 
+  /* 눈금 간격: 값의 폭에 맞춰 6~10개 선이 되도록 고른다 */
+  function tickStep(range) {
+    var steps = [1, 2, 5, 10, 20, 25], i;
+    for (i = 0; i < steps.length; i++) if (range / steps[i] <= 9) return steps[i];
+    return 50;
+  }
+
   function renderChart() {
     var shell = $("chart");
     shell.textContent = "";
-    var k = key(state.hz);
-    var hz = HZ.filter(function (h) { return h.id === state.hz; })[0];
+    var k = key(state.asset, state.hz);
+    var hz = pick(HZ, state.hz), asset = pick(ASSETS, state.asset);
 
-    var pts = [];
-    for (var i = 0; i < PANEL.length; i++) {
-      if (PANEL[i][k] !== undefined) pts.push(PANEL[i]);
-    }
+    var pts = [], i;
+    for (i = 0; i < PANEL.length; i++) if (PANEL[i][k] !== undefined) pts.push(PANEL[i]);
 
     var w = shell.clientWidth || 820;
     var h = w < 560 ? 300 : 360;
-    var padL = 46, padR = 18, padT = 14, padB = 44;
+    var padL = 52, padR = 18, padT = 14, padB = 44;
     var pw = w - padL - padR, ph = h - padT - padB;
 
     var svg = el("svg", { viewBox: "0 0 " + w + " " + h, width: w, height: h,
                           role: "img", "aria-label":
-                          "시작 금리와 " + hz.word + " 연평균 수익률 산점도" }, shell);
+                          "시작 금리와 " + hz.word + " " + asset.word + " 연평균 수익률 산점도" },
+                 shell);
 
     var xMax = 16, yLo = 0, yHi = 0;
     pts.forEach(function (p) {
       if (p[k] < yLo) yLo = p[k];
       if (p[k] > yHi) yHi = p[k];
     });
-    yLo = Math.floor((yLo - 1) / 5) * 5;
-    yHi = Math.ceil((yHi + 1) / 5) * 5;
+    var step = tickStep(yHi - yLo);
+    yLo = Math.floor((yLo - step / 2) / step) * step;
+    yHi = Math.ceil((yHi + step / 2) / step) * step;
 
     function X(v) { return padL + v / xMax * pw; }
     function Y(v) { return padT + (yHi - v) / (yHi - yLo) * ph; }
 
     /* 입력 금리 밴드 */
-    var bx1 = X(Math.max(0, state.rate - state.win)), bx2 = X(Math.min(xMax, state.rate + state.win));
+    var bx1 = X(Math.max(0, state.rate - state.win));
+    var bx2 = X(Math.min(xMax, state.rate + state.win));
     el("rect", { x: bx1, y: padT, width: Math.max(2, bx2 - bx1), height: ph,
                  style: "fill:var(--band)" }, svg);
 
     /* 가로 격자 */
-    for (var t = yLo; t <= yHi; t += 5) {
+    for (var t = yLo; t <= yHi + 1e-9; t += step) {
       var strong = Math.abs(t) < 1e-9;
       el("line", { x1: padL, y1: Y(t), x2: padL + pw, y2: Y(t),
                    style: "stroke:var(" + (strong ? "--axis" : "--grid") + ");stroke-width:1" }, svg);
@@ -371,14 +433,24 @@
                  style: "fill:var(--muted);font-size:11.5px" }, svg)
       .appendChild(document.createTextNode("→ 시작 시점의 10년 국채금리"));
 
-    /* 만기보유 기준선: 수익률 = 시작 금리 */
-    if (state.basis === "nom") {
+    if (state.asset === "bond" && state.basis === "nom") {
+      /* 국채: 만기까지 들고 있었다면 받았을 수익률 = 시작 금리 */
       var dLo = Math.max(yLo, 0), dHi = Math.min(yHi, xMax);
       el("line", { x1: X(dLo), y1: Y(dLo), x2: X(dHi), y2: Y(dHi),
                    style: "stroke:var(--axis);stroke-width:1.5;stroke-dasharray:4 4" }, svg);
       el("text", { x: X(dHi) - 6, y: Y(dHi) - 8, "text-anchor": "end",
                    style: "fill:var(--muted);font-size:11.5px;" + HALO }, svg)
         .appendChild(document.createTextNode("수익률 = 시작 금리"));
+    } else {
+      /* 주식: 금리와 무관한 기준선 — 전 기간 평균 */
+      var avg = overallMean(state.asset, state.hz, ERAS[0].from);
+      if (avg !== null) {
+        el("line", { x1: padL, y1: Y(avg), x2: padL + pw, y2: Y(avg),
+                     style: "stroke:var(--axis);stroke-width:1.5;stroke-dasharray:4 4" }, svg);
+        el("text", { x: padL + pw - 6, y: Y(avg) - 8, "text-anchor": "end",
+                     style: "fill:var(--muted);font-size:11.5px;" + HALO }, svg)
+          .appendChild(document.createTextNode("금리를 안 보고 늘 보유했다면 " + pct(avg)));
+      }
     }
 
     /* 점: 한 달에 하나 */
@@ -390,12 +462,12 @@
     });
 
     /* 밴드 안 평균 (1953년 이후 전체) */
-    var all = stats(ERAS[0].from, state.hz, state.rate, state.win);
+    var all = stats(ERAS[0].from, state.asset, state.hz, state.rate, state.win);
     if (all.n) {
       el("line", { x1: bx1 - 6, y1: Y(all.mean), x2: bx2 + 6, y2: Y(all.mean),
                    style: "stroke:var(--ink);stroke-width:2" }, svg);
       var lx = bx2 + 10, anchor = "start";
-      if (lx > padL + pw - 90) { lx = bx1 - 10; anchor = "end"; }
+      if (lx > padL + pw - 110) { lx = bx1 - 10; anchor = "end"; }
       el("text", { x: lx, y: Y(all.mean) - 7, "text-anchor": anchor,
                    style: "fill:var(--ink);font-size:11.5px;font-weight:600;" + HALO }, svg)
         .appendChild(document.createTextNode("1953년 이후 평균 " + pct(all.mean)));
@@ -418,25 +490,28 @@
       ring.setAttribute("cy", Y(best[k]));
       ring.style.opacity = 1;
       showTip(evt, monthKo(best.m) + " 시작 · 금리 " + best.y.toFixed(2) + "%<br>" +
-                   hz.word + " 연평균 " + pct(best[k]));
+                   hz.word + " " + asset.short + " 연평균 " + pct(best[k]));
     });
     hit.addEventListener("mouseleave", function () { ring.style.opacity = 0; hideTip(); });
 
-    var r = correlation(state.hz, ERAS[0].from);
+    var r = correlation(state.asset, state.hz, ERAS[0].from);
+    var strength = r === null ? "" :
+      Math.abs(r) < 0.25 ? " — 거의 관계가 없습니다"
+      : Math.abs(r) < 0.6 ? " — 약한 관계입니다" : " — 뚜렷한 관계입니다";
     $("chart-note").textContent =
       "점 하나가 시작한 달 하나입니다. " + pts.length + "개월 · " +
-      "시작 금리와 " + hz.word + " 수익률의 상관계수 " +
-      (r === null ? "–" : r.toFixed(2)) + ".";
+      "시작 금리와 " + hz.word + " " + asset.short + " 수익률의 상관계수 " +
+      (r === null ? "–" : minus(r.toFixed(2))) + strength + ".";
   }
 
   /* -------------------------------------------------------------- table */
   function renderTable() {
-    var era = ERAS.filter(function (e) { return e.id === state.era; })[0];
+    var era = pick(ERAS, state.era);
     var body = $("bucket-table").querySelector("tbody");
     body.textContent = "";
 
     BUCKETS.forEach(function (b) {
-      var cells = HZ.map(function (h) { return bucketStats(era.from, h.id, b.lo, b.hi); });
+      var cells = HZ.map(function (h) { return bucketStats(era.from, state.asset, h.id, b.lo, b.hi); });
       var five = cells[2];
       var tr = document.createElement("tr");
       if (state.rate >= b.lo && state.rate < b.hi) tr.className = "here";
@@ -468,14 +543,15 @@
 
     $("bucket-caption").textContent =
       era.name + " (" + era.from.replace("-", ".") + " – " +
-      DATA.meta.last.replace("-", ".") + ") · " +
-      BASIS.filter(function (x) { return x.id === state.basis; })[0].word +
+      DATA.meta.last.replace("-", ".") + ") · " + pick(ASSETS, state.asset).word +
+      " · " + pick(BASIS, state.basis).word +
       " 연평균 총수익률 · 표본은 5년 수익률을 알 수 있는 달 수";
   }
 
   /* ------------------------------------------------------------- render */
   function render() {
     buildControls();
+    document.documentElement.setAttribute("data-asset", state.asset);
     $("rate-cat").textContent = levelChip(state.rate);
     renderVerdict();
     renderEras();

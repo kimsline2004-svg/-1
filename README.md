@@ -1,4 +1,17 @@
-# 공포탐욕 수익률 계산기
+# 과거 데이터로 보는 수익률 계산기
+
+브라우저에서 바로 열리는 정적 웹앱 두 개가 들어 있습니다. 둘 다 라이브러리 없이
+HTML + CSS + JS로만 만들었고, 원본 데이터와 통계 생성 스크립트를 함께 커밋해
+네트워크 없이도 재현됩니다.
+
+| 앱 | 입력 | 보여주는 것 | 폴더 |
+|---|---|---|---|
+| 공포탐욕 수익률 계산기 | CNN 공포탐욕지수 0–100 | S&P 500의 이후 1년 수익률 분포 (1980년~) | 저장소 루트 `app/`, `pipeline/` |
+| [국채금리 수익률 계산기](ust10y/) | 미국 10년 국채금리 % | 10년 국채의 이후 1·3·5년 연평균 총수익률 (1953년~) | [`ust10y/`](ust10y/) |
+
+---
+
+## 공포탐욕 수익률 계산기
 
 CNN Fear &amp; Greed Index 점수를 입력하면, **1980년 이후 같은 점수대에서 실제로 나온
 S&amp;P 500의 이후 1년 수익률 분포**를 보여주는 정적 웹앱입니다.
@@ -10,7 +23,7 @@ dist/       한 파일로 합친 배포본
 docs/       방법론 상세
 ```
 
-## 실행
+### 실행
 
 ```bash
 python3 -m http.server 8000 --directory app   # http://localhost:8000
@@ -19,7 +32,7 @@ python3 -m http.server 8000 --directory app   # http://localhost:8000
 또는 `dist/fng-calculator.html` 한 파일을 브라우저로 바로 열어도 됩니다
 (데이터가 파일 안에 들어 있습니다).
 
-## 데이터 다시 만들기
+### 데이터 다시 만들기
 
 ```bash
 pip install pandas numpy
@@ -38,7 +51,7 @@ python3 pipeline/build_artifact.py    # dist/*.html 생성
 | `shiller_monthly.csv` | S&amp;P 500 월별 + 배당, Shiller/FRED | [datasets/s-and-p-500](https://github.com/datasets/s-and-p-500) |
 | `vix_daily.csv` | VIX 일별 1990–2026 | [datasets/finance-vix](https://github.com/datasets/finance-vix) |
 
-## 만드는 방법 요약
+### 만드는 방법 요약
 
 1. **지수** — CNN 공포탐욕지수는 2011년에 시작했습니다. 그래서 2011-01-03 이후는
    CNN이 발표한 값을 그대로 쓰고, 그 이전은 CNN의 7개 구성요소 중 가격·변동성으로
@@ -53,7 +66,7 @@ python3 pipeline/build_artifact.py    # dist/*.html 생성
 
 자세한 내용은 [docs/METHODOLOGY.md](docs/METHODOLOGY.md)를 보세요.
 
-## 결과 (1980–2025, 1년 후 가격 수익률)
+### 결과 (1980–2025, 1년 후 가격 수익률)
 
 | CNN 단계 | 표본 | 평균 | 중앙값 | 상승 확률 | 최악 | 최고 |
 |---|---|---|---|---|---|---|
@@ -70,7 +83,7 @@ python3 pipeline/build_artifact.py    # dist/*.html 생성
 나왔습니다. 2011년 이후 CNN 실측 데이터만 보면 극단적 공포의 평균이 +13.0%로 올라가는데,
 이 기간이 거의 전부 강세장이었기 때문입니다.
 
-## 반드시 알아둘 한계
+### 반드시 알아둘 한계
 
 - **관측치가 겹칩니다.** 매일 계산한 1년 수익률은 서로 364일을 공유합니다.
   표본 11,499개는 독립적인 사건 45건이 아니라 45년치일 뿐입니다.

@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>국채금리 수익률 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ------------------------------------------------------------------
+   국채금리 수익률 계산기 — tokens
+   Neutrals carry a faint slate bias (the ledger paper of a rates desk).
+   The three era hues are the validated categorical trio; +/- keeps its
+   own semantic pair and is never used for a series.
+------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --plane:      #f1f4f6;
+  --surface:    #fcfdfe;
+  --surface-2:  #e6ebef;
+  --ink:        #101519;
+  --ink-2:      #4b555f;
+  --muted:      #7e8892;
+  --grid:       #dee4e9;
+  --axis:       #bec7cf;
+  --hairline:   rgba(16, 21, 25, .10);
+  --shadow:     0 1px 2px rgba(16, 21, 25, .05);
+
+  --era-1:      #2a78d6;   /* 1953–79 */
+  --era-2:      #eb6834;   /* 1980–2009 */
+  --era-3:      #1baf7a;   /* 2010– */
+  --band:       rgba(42, 120, 214, .10);
+  --band-line:  rgba(42, 120, 214, .45);
+  --good:       #006300;
+  --bad:        #d03b3b;
+
+  --r-sm: 3px;
+  --r-md: 6px;
+  --step: clamp(20px, 3vw, 32px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane:      #0b0e11;
+    --surface:    #171b1f;
+    --surface-2:  #212830;
+    --ink:        #ffffff;
+    --ink-2:      #c2cad2;
+    --muted:      #869099;
+    --grid:       #282f36;
+    --axis:       #3a434b;
+    --hairline:   rgba(255, 255, 255, .12);
+    --shadow:     none;
+    --era-1:      #3987e5;
+    --era-2:      #d95926;
+    --era-3:      #199e70;
+    --band:       rgba(57, 135, 229, .14);
+    --band-line:  rgba(57, 135, 229, .55);
+    --good:       #0ca30c;
+    --bad:        #e66767;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane:      #0b0e11;
+  --surface:    #171b1f;
+  --surface-2:  #212830;
+  --ink:        #ffffff;
+  --ink-2:      #c2cad2;
+  --muted:      #869099;
+  --grid:       #282f36;
+  --axis:       #3a434b;
+  --hairline:   rgba(255, 255, 255, .12);
+  --shadow:     none;
+  --era-1:      #3987e5;
+  --era-2:      #d95926;
+  --era-3:      #199e70;
+  --band:       rgba(57, 135, 229, .14);
+  --band-line:  rgba(57, 135, 229, .55);
+  --good:       #0ca30c;
+  --bad:        #e66767;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo",
+               "Malgun Gothic", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: clamp(28px, 5vw, 56px) 64px;
+  padding-left: 16px;
+  padding-right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--step);
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.num { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+       font-variant-numeric: tabular-nums; }
+.pos { color: var(--good); }
+.neg { color: var(--bad); }
+
+/* ------------------------------------------------------------ masthead */
+.masthead { display: flex; flex-direction: column; gap: 14px; }
+
+.eyebrow {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+.masthead h1 {
+  margin: 0;
+  font-size: clamp(30px, 5.4vw, 50px);
+  line-height: 1.12;
+  font-weight: 700;
+  letter-spacing: -.022em;
+  text-wrap: balance;
+}
+
+.standfirst {
+  margin: 0; max-width: 60ch;
+  font-size: clamp(15px, 1.6vw, 17px);
+  color: var(--ink-2);
+}
+.standfirst em { font-style: normal; font-weight: 600; color: var(--ink); }
+
+.masthead-facts {
+  display: flex; flex-wrap: wrap; gap: 0 32px; margin: 6px 0 0;
+  padding-top: 14px; border-top: 1px solid var(--hairline);
+}
+.masthead-facts div { display: flex; flex-direction: column; gap: 2px; }
+.masthead-facts dt {
+  font-size: 11.5px; letter-spacing: .06em; color: var(--muted);
+}
+.masthead-facts dd {
+  margin: 0; font-family: "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 500;
+}
+
+/* ------------------------------------------------------------- console */
+.console {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: clamp(18px, 2.6vw, 26px);
+  display: grid; gap: 22px;
+  grid-template-columns: minmax(260px, 1.25fr) minmax(240px, 1fr);
+}
+@media (max-width: 720px) { .console { grid-template-columns: 1fr; } }
+
+.rate-input { display: flex; flex-direction: column; gap: 10px; }
+.rate-input > label {
+  font-size: 12px; letter-spacing: .06em; color: var(--muted);
+}
+.rate-row { display: flex; align-items: baseline; gap: 10px; }
+.rate-row input[type="number"] {
+  width: 5.2em;
+  font-family: "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(30px, 4.4vw, 40px); font-weight: 600;
+  color: var(--ink); background: transparent;
+  border: 0; border-bottom: 2px solid var(--ink); border-radius: 0;
+  padding: 0 0 2px; text-align: right;
+}
+.rate-row input[type="number"]:focus-visible { outline: 2px solid var(--era-1); outline-offset: 3px; }
+.rate-row .unit { font-size: 22px; font-weight: 600; color: var(--ink-2); }
+.rate-row .cat-chip {
+  margin-left: auto; align-self: center;
+  font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); white-space: nowrap;
+}
+
+input[type="range"] { width: 100%; accent-color: var(--era-1); margin: 0; }
+.scale-ends {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+}
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button {
+  font: inherit; font-size: 12.5px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--hairline); background: var(--surface-2);
+  color: var(--ink-2); cursor: pointer;
+}
+.presets button:hover { color: var(--ink); border-color: var(--axis); }
+
+.options { display: flex; flex-direction: column; gap: 14px; }
+.options fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.options legend {
+  padding: 0; font-size: 11.5px; letter-spacing: .06em; color: var(--muted);
+}
+.seg { display: flex; border: 1px solid var(--hairline); border-radius: var(--r-sm); overflow: hidden; }
+.seg button {
+  flex: 1; font: inherit; font-size: 13px; padding: 6px 8px;
+  background: var(--surface); color: var(--ink-2);
+  border: 0; border-left: 1px solid var(--hairline); cursor: pointer;
+  white-space: nowrap;
+}
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+
+/* -------------------------------------------------------------- verdict */
+.verdict {
+  font-size: clamp(16px, 2vw, 19px); line-height: 1.55;
+  margin: 0; max-width: 64ch; color: var(--ink-2);
+}
+.verdict strong { color: var(--ink); font-weight: 600; }
+.verdict .num { font-weight: 600; }
+
+/* ---------------------------------------------------------------- eras */
+.era-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 860px) { .era-grid { grid-template-columns: 1fr; } }
+
+.era {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+}
+.era-head {
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--hairline);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.era-head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.era-head .era-sub {
+  font-size: 11.5px; color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+}
+.era-swatch { display: flex; gap: 2px; }
+.era-swatch i { display: block; width: 18px; height: 4px; border-radius: 2px; }
+
+.hz-rows { display: flex; flex-direction: column; }
+.hz {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline;
+  gap: 4px 12px; padding: 12px 16px;
+  border-top: 1px solid var(--hairline);
+}
+.hz:first-child { border-top: 0; }
+.hz-label { font-size: 12.5px; color: var(--muted); grid-row: 1 / -1; align-self: center; }
+.hz-mean {
+  font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+  font-size: clamp(22px, 3vw, 27px); font-weight: 600; letter-spacing: -.02em;
+  text-align: right;
+}
+.hz-meta {
+  grid-column: 2; text-align: right;
+  font-size: 11.5px; color: var(--muted);
+  font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+}
+.hz.empty .hz-mean { font-size: 15px; color: var(--muted); font-weight: 400; }
+.thin { color: var(--ink-2); }
+
+/* --------------------------------------------------------------- chart */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: clamp(16px, 2.4vw, 24px);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.panel-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: flex-end; justify-content: space-between; }
+.panel-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.012em; }
+.panel-head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); max-width: 58ch; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+
+.chart-shell { width: 100%; }
+.chart-shell svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.tooltip {
+  position: fixed; z-index: 20; pointer-events: none; opacity: 0;
+  transition: opacity .1s linear;
+  background: var(--ink); color: var(--plane);
+  padding: 7px 10px; border-radius: var(--r-sm);
+  font-size: 12px; line-height: 1.45; white-space: nowrap;
+  font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+}
+.tooltip.on { opacity: 1; }
+
+/* --------------------------------------------------------------- table */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+caption { text-align: left; font-size: 12.5px; color: var(--muted); padding-bottom: 8px; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-size: 11.5px; letter-spacing: .04em; color: var(--muted); font-weight: 500;
+  border-bottom: 1px solid var(--axis);
+}
+tbody tr { border-bottom: 1px solid var(--hairline); }
+tbody tr.here { background: var(--band); }
+tbody td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+tbody td.dim { color: var(--muted); }
+
+/* --------------------------------------------------------------- notes */
+.notes { display: grid; gap: var(--step); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.notes h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.notes p, .notes li { font-size: 13.5px; color: var(--ink-2); margin: 0 0 8px; }
+.notes ul { margin: 0; padding-left: 18px; }
+.notes li { margin-bottom: 6px; }
+.notes code {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+  background: var(--surface-2); padding: 1px 4px; border-radius: var(--r-sm);
+}
+
+.colophon {
+  border-top: 1px solid var(--hairline); padding-top: 16px;
+  font-size: 12.5px; color: var(--muted);
+}
+.colophon a { color: inherit; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">US 10-Year Treasury · 1953 – 2026</p>
+    <h1>10년 국채금리를 넣으면<br>1·3·5년 후 수익률이 나옵니다</h1>
+    <p class="standfirst">
+      미국 10년 국채금리가 지금과 같은 수준이었던 과거의 달들을 모아, 그 뒤 1년·3년·5년
+      동안 10년 국채가 실제로 낸 <em>총수익률</em>(이자 + 가격 변동)을 평균 냅니다.
+      1950년대 이후 · 1980년대 이후 · 2010년대 이후 세 기준을 나란히 보여줍니다.
+    </p>
+    <dl class="masthead-facts">
+      <div><dt>관측 표본</dt><dd id="fact-obs">–</dd></div>
+      <div><dt>기간</dt><dd id="fact-range">–</dd></div>
+      <div><dt>최근 금리</dt><dd id="fact-latest">–</dd></div>
+    </dl>
+  </header>
+
+  <section class="console" aria-labelledby="console-h">
+    <h2 id="console-h" class="sr-only">금리 입력</h2>
+
+    <div class="rate-input">
+      <label for="rate-number">미국 10년 국채금리</label>
+      <div class="rate-row">
+        <input id="rate-number" type="number" min="0.5" max="16" step="0.05" value="4.60"
+               inputmode="decimal" aria-describedby="rate-cat">
+        <span class="unit">%</span>
+        <span id="rate-cat" class="cat-chip">–</span>
+      </div>
+      <input id="rate-range" type="range" min="0.5" max="16" step="0.05" value="4.60"
+             aria-label="10년 국채금리 슬라이더">
+      <div class="scale-ends"><span>0.5%</span><span>16%</span></div>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="options">
+      <fieldset>
+        <legend>수익률 기준</legend>
+        <div class="seg" id="opt-basis" role="group"></div>
+      </fieldset>
+      <fieldset>
+        <legend>비슷한 금리로 볼 범위</legend>
+        <div class="seg" id="opt-window" role="group"></div>
+      </fieldset>
+      <fieldset>
+        <legend>아래 그래프에 그릴 기간</legend>
+        <div class="seg" id="opt-hz" role="group"></div>
+      </fieldset>
+    </div>
+  </section>
+
+  <p class="verdict" id="verdict">–</p>
+
+  <section aria-labelledby="eras-h">
+    <h2 id="eras-h" class="sr-only">기준 기간별 결과</h2>
+    <div class="era-grid" id="era-grid"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="chart-h">
+    <div class="panel-head">
+      <div>
+        <h2 id="chart-h">시작 금리와 그 뒤의 수익률</h2>
+        <p id="chart-note">–</p>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="chart-shell" id="chart"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="table-h">
+    <div class="panel-head">
+      <div>
+        <h2 id="table-h">금리 구간별 평균</h2>
+        <p>연평균 총수익률입니다. 지금 입력한 금리가 속한 줄은 색으로 표시됩니다.</p>
+      </div>
+      <div class="seg" id="opt-era" role="group" aria-label="표에 쓸 기준 기간"></div>
+    </div>
+    <div class="table-wrap">
+      <table id="bucket-table">
+        <caption id="bucket-caption">–</caption>
+        <thead>
+          <tr>
+            <th scope="col">시작 금리</th>
+            <th scope="col">표본</th>
+            <th scope="col">1년 후</th>
+            <th scope="col">3년 후</th>
+            <th scope="col">5년 후</th>
+            <th scope="col">5년 후 플러스 확률</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h2>수익률을 어떻게 계산했나</h2>
+      <p>
+        매달 초에 <strong>액면가로 발행된 10년 만기 국채</strong>를 사고, 한 달 뒤 잔존만기
+        9년 11개월이 된 그 채권을 그날의 10년 금리로 평가해 판 다음, 다시 새 10년 국채를
+        사는 것을 반복한 수익률입니다(constant maturity roll). 이자 수입과 가격 변동이
+        모두 들어갑니다. 1년·3년·5년 수치는 모두 <strong>연평균(연환산)</strong>입니다.
+      </p>
+      <p>
+        이렇게 계산한 연도별 수익률은 널리 인용되는 10년물 총수익률과 거의 같습니다
+        (1982년 +35.7%, 1994년 −7.5%, 2022년 −14.9%). 월평균 금리를 쓰기 때문에
+        금리가 급변한 해는 1~3%p 정도 완만하게 나옵니다.
+      </p>
+    </div>
+    <div>
+      <h2>이 표를 읽을 때 조심할 것</h2>
+      <ul>
+        <li><strong>관측치가 겹칩니다.</strong> 매달 계산한 5년 수익률은 이웃한 달과
+            59개월을 공유합니다. 표본 100개월은 독립적인 사건 100건이 아닙니다.</li>
+        <li><strong>기준 기간마다 금리대가 다릅니다.</strong> 2010년 이후에는 8% 금리가
+            한 번도 없었고, 1953~79년에는 2% 아래가 거의 없었습니다. 표본 없음이
+            나오는 것이 정상입니다.</li>
+        <li><strong>1953~81년은 금리 상승기, 1982~2020년은 하락기</strong>였습니다.
+            같은 금리대라도 어느 국면에서 나왔느냐에 따라 결과가 갈립니다.</li>
+        <li><strong>명목 수익률에는 물가가 빠져 있습니다.</strong> 1970년대의 두 자릿수
+            수익률은 두 자릿수 물가와 짝이었습니다. 위에서 <em>실질</em>을 골라
+            비교해 보세요.</li>
+        <li>교육·연구용이며 투자 자문이 아닙니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    금리: FRED <code>GS10</code> (10-Year Treasury Constant Maturity Rate, 월평균) ·
+    물가: BLS CPI-U · 계산과 원본 데이터는 저장소의 <code>ust10y/pipeline/</code>에 있습니다.
+  </footer>
+
+</div>
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+<script type="application/json" id="ust10y-data">{"meta":{"source":"FRED GS10 (10-Year Treasury Constant Maturity Rate, 월평균) / BLS CPI-U","first":"1953-04","last":"2026-07","count":880,"latestRate":4.6},"panel":[{"m":"1953-04","y":2.83,"h1":7.68,"h1r":6.87,"h3":1.68,"h3r":1.3,"h5":2.9,"h5r":1.2},{"m":"1953-05","y":3.05,"h1":8.91,"h1r":8.1,"h3":2.65,"h3r":2.27,"h5":3.21,"h5r":1.59},{"m":"1953-06","y":3.11,"h1":9.3,"h1r":8.9,"h3":3.03,"h3r":2.52,"h5":3.23,"h5r":1.68},{"m":"1953-07","y":2.93,"h1":8.34,"h1r":7.94,"h3":2.18,"h3r":1.43,"h5":2.51,"h5r":0.91},{"m":"1953-08","y":2.95,"h1":7.9,"h1r":7.9,"h3":1.62,"h3r":1.12,"h5":1.97,"h5r":0.51},{"m":"1953-09","y":2.87,"h1":6.93,"h1r":7.33,"h3":1.25,"h3r":0.63,"h5":1.47,"h5r":0.02},{"m":"1953-10","y":2.66,"h1":4.52,"h1r":5.3,"h3":0.77,"h3r":0.16,"h5":1.05,"h5r":-0.31},{"m":"1953-11","y":2.68,"h1":4.22,"h1r":4.61,"h3":0.43,"h3r":-0.31,"h5":1.2,"h5r":-0.31},{"m":"1953-12","y":2.59,"h1":3.13,"h1r":3.9,"h3":-0.08,"h3r":-0.94,"h5":0.87,"h5r":-0.57},{"m":"1954-01","y":2.48,"h1":1.26,"h1r":2.01,"h3":-0.02,"h3r":-0.87,"h5":0.43,"h5r":-1.07},{"m":"1954-02","y":2.47,"h1":0.83,"h1r":1.58,"h3":0.31,"h3r":-0.66,"h5":0.54,"h5r":-0.89},{"m":"1954-03","y":2.37,"h1":-0.29,"h1r":0.45,"h3":-0.15,"h3r":-1.24,"h5":0.34,"h5r":-1.09},{"m":"1954-04","y":2.29,"h1":-1.56,"h1r":-1.19,"h3":-0.55,"h3r":-1.87,"h5":0.01,"h5r":-1.55},{"m":"1954-05","y":2.37,"h1":-0.91,"h1r":-0.17,"h3":-0.61,"h3r":-1.93,"h5":-0.12,"h5r":-1.61},{"m":"1954-06","y":2.38,"h1":-0.97,"h1r":-0.22,"h3":-1.09,"h3r":-2.52,"h5":-0.12,"h5r":-1.68},{"m":"1954-07","y":2.3,"h1":-2.63,"h1r":-2.27,"h3":-1.63,"h3r":-3.28,"h5":-0.32,"h5r":-1.95},{"m":"1954-08","y":2.36,"h1":-2.65,"h1r":-2.29,"h3":-1.42,"h3r":-3.07,"h5":-0.23,"h5r":-1.85},{"m":"1954-09","y":2.38,"h1":-2.43,"h1r":-2.8,"h3":-1.29,"h3r":-3.07,"h5":-0.56,"h5r":-2.31},{"m":"1954-10","y":2.43,"h1":-1.2,"h1r":-1.57,"h3":-1.24,"h3r":-3.02,"h5":-0.2,"h5r":-2.03},{"m":"1954-11","y":2.48,"h1":-0.82,"h1r":-1.19,"h3":-0.38,"h3r":-2.29,"h5":-0.08,"h5r":-1.91},{"m":"1954-12","y":2.51,"h1":-1.12,"h1r":-1.49,"h3":1.15,"h3r":-0.91,"h5":-0.24,"h5r":-2.14},{"m":"1955-01","y":2.61,"h1":0.29,"h1r":-0.08,"h3":1.8,"h3r":-0.5,"h5":-0.08,"h5r":-1.92},{"m":"1955-02","y":2.65,"h1":1.18,"h1r":0.81,"h3":2.05,"h3r":-0.26,"h5":0.39,"h5r":-1.53},{"m":"1955-03","y":2.68,"h1":0.43,"h1r":0.05,"h3":2.35,"h3r":-0.2,"h5":0.85,"h5r":-1.07},{"m":"1955-04","y":2.75,"h1":-0.82,"h1r":-1.55,"h3":2.86,"h3r":0.18,"h5":0.95,"h5r":-1.04},{"m":"1955-05","y":2.76,"h1":0.23,"h1r":-0.88,"h3":2.77,"h3r":0.1,"h5":0.88,"h5r":-1.11},{"m":"1955-06","y":2.78,"h1":1.03,"h1r":-0.83,"h3":2.69,"h3r":0.01,"h5":1.26,"h5r":-0.8},{"m":"1955-07","y":2.9,"h1":1.14,"h1r":-1.07,"h3":2.38,"h3r":-0.28,"h5":1.91,"h5r":-0.1},{"m":"1955-08","y":2.97,"h1":-0.11,"h1r":-1.94,"h3":1.62,"h3r":-0.9,"h5":2.21,"h5r":0.2},{"m":"1955-09","y":2.97,"h1":-0.49,"h1r":-2.31,"h3":1.02,"h3r":-1.37,"h5":2.22,"h5r":0.29},{"m":"1955-10","y":2.88,"h1":-0.89,"h1r":-3.05,"h3":0.68,"h3r":-1.7,"h5":1.93,"h5r":-0.13},{"m":"1955-11","y":2.89,"h1":-2.0,"h1r":-4.14,"h3":0.89,"h3r":-1.6,"h5":1.9,"h5r":-0.17},{"m":"1955-12","y":2.96,"h1":-2.18,"h1r":-5.02,"h3":0.79,"h3r":-1.71,"h5":2.19,"h5r":0.04},{"m":"1956-01","y":2.9,"h1":-1.58,"h1r":-4.43,"h3":0.21,"h3r":-2.4,"h5":2.1,"h5r":-0.05},{"m":"1956-02","y":2.84,"h1":-1.06,"h1r":-4.27,"h3":0.23,"h3r":-2.26,"h5":2.11,"h5r":-0.03},{"m":"1956-03","y":2.96,"h1":-0.58,"h1r":-4.15,"h3":0.52,"h3r":-1.98,"h5":2.4,"h5r":0.25},{"m":"1956-04","y":3.18,"h1":0.75,"h1r":-2.86,"h3":0.82,"h3r":-1.67,"h5":2.73,"h5r":0.65},{"m":"1956-05","y":3.07,"h1":-1.14,"h1r":-4.67,"h3":0.03,"h3r":-2.33,"h5":2.67,"h5r":0.66},{"m":"1956-06","y":3.0,"h1":-3.29,"h1r":-6.39,"h3":-0.22,"h3r":-2.44,"h5":2.27,"h5r":0.42},{"m":"1956-07","y":3.11,"h1":-3.35,"h1r":-6.43,"h3":-0.03,"h3r":-2.13,"h5":2.41,"h5r":0.57},{"m":"1956-08","y":3.33,"h1":-1.47,"h1r":-4.96,"h3":0.55,"h3r":-1.68,"h5":2.61,"h5r":0.76},{"m":"1956-09","y":3.38,"h1":-0.93,"h1r":-4.08,"h3":0.06,"h3r":-2.15,"h5":2.8,"h5r":0.96},{"m":"1956-10","y":3.34,"h1":-1.62,"h1r":-4.4,"h3":0.37,"h3r":-1.84,"h5":2.85,"h5r":1.07},{"m":"1956-11","y":3.49,"h1":1.72,"h1r":-1.51,"h3":0.83,"h3r":-1.39,"h5":3.08,"h5r":1.3},{"m":"1956-12","y":3.59,"h1":6.98,"h1r":3.97,"h3":0.71,"h3r":-1.39,"h5":3.06,"h5r":1.35},{"m":"1957-01","y":3.46,"h1":6.88,"h1r":3.14,"h3":0.3,"h3r":-1.68,"h5":2.81,"h5r":1.11},{"m":"1957-02","y":3.34,"h1":6.15,"h1r":2.81,"h3":0.61,"h3r":-1.37,"h5":2.68,"h5r":0.99},{"m":"1957-03","y":3.41,"h1":7.38,"h1r":3.65,"h3":1.47,"h3r":-0.4,"h5":3.0,"h5r":1.37},{"m":"1957-04","y":3.48,"h1":8.89,"h1r":5.13,"h3":1.61,"h3r":-0.26,"h5":3.28,"h5r":1.65},{"m":"1957-05","y":3.6,"h1":9.55,"h1r":6.14,"h3":1.78,"h3r":0.03,"h5":3.44,"h5r":1.89},{"m":"1957-06","y":3.8,"h1":10.84,"h1r":7.77,"h3":2.91,"h3r":1.14,"h5":3.72,"h5r":2.23},{"m":"1957-07","y":3.93,"h1":9.78,"h1r":7.13,"h3":3.98,"h3r":2.44,"h5":3.77,"h5r":2.36},{"m":"1957-08","y":3.93,"h1":6.62,"h1r":4.41,"h3":4.26,"h3r":2.71,"h5":3.82,"h5r":2.41},{"m":"1957-09","y":3.92,"h1":4.58,"h1r":2.41,"h3":4.23,"h3r":2.68,"h5":3.81,"h5r":2.33},{"m":"1957-10","y":3.97,"h1":4.65,"h1r":2.48,"h3":4.11,"h3r":2.34,"h5":3.98,"h5r":2.5},{"m":"1957-11","y":3.72,"h1":3.04,"h1r":0.91,"h3":3.3,"h3r":1.65,"h5":3.57,"h5r":2.17},{"m":"1957-12","y":3.21,"h1":-2.16,"h1r":-3.86,"h3":2.12,"h3r":0.49,"h5":2.81,"h5r":1.42},{"m":"1958-01","y":3.09,"h1":-4.35,"h1r":-5.67,"h3":1.79,"h3r":0.4,"h5":2.66,"h5r":1.42},{"m":"1958-02","y":3.05,"h1":-4.14,"h1r":-5.13,"h3":1.86,"h3r":0.48,"h5":2.45,"h5r":1.21},{"m":"1958-03","y":2.98,"h1":-4.87,"h1r":-5.19,"h3":1.79,"h3r":0.64,"h5":2.33,"h5r":1.16},{"m":"1958-04","y":2.88,"h1":-6.58,"h1r":-6.9,"h3":1.41,"h3r":0.38,"h5":2.11,"h5r":1.01},{"m":"1958-05","y":2.92,"h1":-7.59,"h1r":-7.91,"h3":1.75,"h3r":0.71,"h5":2.26,"h5r":1.16},{"m":"1958-06","y":2.97,"h1":-7.31,"h1r":-7.95,"h3":1.44,"h3r":0.41,"h5":2.27,"h5r":1.1},{"m":"1958-07","y":3.2,"h1":-5.82,"h1r":-6.47,"h3":2.02,"h3r":0.87,"h5":2.63,"h5r":1.47},{"m":"1958-08","y":3.54,"h1":-3.23,"h1r":-4.23,"h3":2.68,"h3r":1.52,"h5":3.27,"h5r":2.03},{"m":"1958-09","y":3.76,"h1":-3.31,"h1r":-4.63,"h3":3.49,"h3r":2.21,"h5":3.52,"h5r":2.28},{"m":"1958-10","y":3.8,"h1":-1.78,"h1r":-3.45,"h3":3.77,"h3r":2.49,"h5":3.54,"h5r":2.23},{"m":"1958-11","y":3.74,"h1":-2.2,"h1r":-3.53,"h3":3.55,"h3r":2.39,"h5":3.43,"h5r":2.19},{"m":"1958-12","y":3.86,"h1":-2.41,"h1r":-4.07,"h3":3.56,"h3r":2.28,"h5":3.62,"h5r":2.24},{"m":"1959-01","y":4.02,"h1":-1.29,"h1r":-2.3,"h3":3.96,"h3r":2.79,"h5":3.83,"h5r":2.52},{"m":"1959-02","y":3.96,"h1":0.07,"h1r":-1.63,"h3":3.91,"h3r":2.51,"h5":3.77,"h5r":2.39},{"m":"1959-03","y":3.99,"h1":2.28,"h1r":0.55,"h3":4.3,"h3r":2.9,"h5":3.7,"h5r":2.32},{"m":"1959-04","y":4.12,"h1":3.14,"h1r":1.39,"h3":4.92,"h3r":3.51,"h5":3.91,"h5r":2.6},{"m":"1959-05","y":4.31,"h1":4.16,"h1r":2.39,"h3":5.36,"h3r":3.95,"h5":4.28,"h5r":2.96},{"m":"1959-06","y":4.34,"h1":6.09,"h1r":4.3,"h3":5.32,"h3r":4.03,"h5":4.38,"h5r":3.06},{"m":"1959-07","y":4.4,"h1":8.75,"h1r":7.28,"h3":5.19,"h3r":3.9,"h5":4.44,"h5r":3.13},{"m":"1959-08","y":4.43,"h1":9.85,"h1r":8.37,"h3":5.35,"h3r":4.06,"h5":4.49,"h5r":3.24},{"m":"1959-09","y":4.68,"h1":11.99,"h1r":10.85,"h3":6.03,"h3r":4.74,"h5":4.88,"h5r":3.64},{"m":"1959-10","y":4.53,"h1":9.79,"h1r":8.31,"h3":5.74,"h3r":4.57,"h5":4.64,"h5r":3.47},{"m":"1959-11","y":4.53,"h1":9.37,"h1r":7.91,"h3":5.75,"h3r":4.58,"h5":4.7,"h5r":3.47},{"m":"1959-12","y":4.69,"h1":11.52,"h1r":10.02,"h3":6.35,"h3r":5.17,"h5":4.91,"h5r":3.67},{"m":"1960-01","y":4.72,"h1":11.71,"h1r":9.83,"h3":6.5,"h3r":5.2,"h5":4.93,"h5r":3.62},{"m":"1960-02","y":4.49,"h1":10.17,"h1r":8.69,"h3":5.58,"h3r":4.41,"h5":4.51,"h5r":3.28},{"m":"1960-03","y":4.25,"h1":8.39,"h1r":6.93,"h3":4.86,"h3r":3.59,"h5":4.11,"h5r":2.82},{"m":"1960-04","y":4.28,"h1":8.25,"h1r":7.16,"h3":4.83,"h3r":3.67,"h5":4.18,"h5r":2.89},{"m":"1960-05","y":4.35,"h1":9.43,"h1r":8.33,"h3":5.13,"h3r":3.96,"h5":4.28,"h5r":2.98},{"m":"1960-06","y":4.15,"h1":6.16,"h1r":5.45,"h3":4.39,"h3r":3.24,"h5":3.94,"h5r":2.59},{"m":"1960-07","y":3.9,"h1":3.68,"h1r":2.3,"h3":3.6,"h3r":2.35,"h5":3.54,"h5r":2.2},{"m":"1960-08","y":3.8,"h1":1.85,"h1r":0.82,"h3":3.38,"h3r":2.13,"h5":3.3,"h5r":1.95},{"m":"1960-09","y":3.8,"h1":2.36,"h1r":1.0,"h3":3.16,"h3r":1.92,"h5":3.24,"h5r":1.9},{"m":"1960-10","y":3.89,"h1":3.63,"h1r":2.94,"h3":3.34,"h3r":2.21,"h5":3.3,"h5r":2.03},{"m":"1960-11","y":3.93,"h1":3.81,"h1r":3.11,"h3":3.43,"h3r":2.3,"h5":3.21,"h5r":1.94},{"m":"1960-12","y":3.84,"h1":2.05,"h1r":1.37,"h3":3.16,"h3r":1.92,"h5":2.79,"h5r":1.46},{"m":"1961-01","y":3.84,"h1":1.91,"h1r":1.23,"h3":3.05,"h3r":1.82,"h5":2.82,"h5r":1.49},{"m":"1961-02","y":3.78,"h1":1.76,"h1r":0.74,"h3":2.95,"h3r":1.71,"h5":2.38,"h5r":0.93},{"m":"1961-03","y":3.74,"h1":2.35,"h1r":1.33,"h3":2.66,"h3r":1.42,"h5":2.26,"h5r":0.76},{"m":"1961-04","y":3.78,"h1":3.46,"h1r":2.09,"h3":2.75,"h3r":1.52,"h5":2.54,"h5r":0.9},{"m":"1961-05","y":3.71,"h1":2.62,"h1r":1.26,"h3":2.65,"h3r":1.42,"h5":2.39,"h5r":0.76},{"m":"1961-06","y":3.88,"h1":3.74,"h1r":2.36,"h3":3.23,"h3r":1.88,"h5":2.65,"h5r":0.95},{"m":"1961-07","y":3.92,"h1":3.23,"h1r":2.21,"h3":3.29,"h3r":2.06,"h5":2.4,"h5r":0.77},{"m":"1961-08","y":4.04,"h1":4.51,"h1r":3.13,"h3":3.64,"h3r":2.4,"h5":2.3,"h5r":0.48},{"m":"1961-09","y":3.98,"h1":3.99,"h1r":2.63,"h3":3.45,"h3r":2.21,"h5":2.28,"h5r":0.53},{"m":"1961-10","y":3.92,"h1":3.91,"h1r":2.54,"h3":3.31,"h3r":2.08,"h5":2.47,"h5r":0.6},{"m":"1961-11","y":3.94,"h1":4.16,"h1r":2.79,"h3":3.49,"h3r":2.14,"h5":2.28,"h5r":0.41},{"m":"1961-12","y":4.06,"h1":5.7,"h1r":4.31,"h3":3.74,"h3r":2.4,"h5":3.01,"h5r":1.12},{"m":"1962-01","y":4.08,"h1":6.11,"h1r":4.71,"h3":3.78,"h3r":2.43,"h5":3.47,"h5r":1.58},{"m":"1962-02","y":4.04,"h1":4.97,"h1r":3.94,"h3":3.61,"h3r":2.38,"h5":3.33,"h5r":1.51},{"m":"1962-03","y":3.93,"h1":3.95,"h1r":2.58,"h3":3.31,"h3r":1.97,"h5":3.31,"h5r":1.42},{"m":"1962-04","y":3.84,"h1":2.86,"h1r":1.84,"h3":3.09,"h3r":1.76,"h5":3.08,"h5r":1.21},{"m":"1962-05","y":3.87,"h1":3.45,"h1r":2.44,"h3":3.16,"h3r":1.83,"h5":2.73,"h5r":0.8},{"m":"1962-06","y":3.91,"h1":3.29,"h1r":1.94,"h3":3.28,"h3r":1.73,"h5":2.54,"h5r":0.55},{"m":"1962-07","y":4.01,"h1":3.89,"h1r":2.54,"h3":3.6,"h3r":2.16,"h5":2.5,"h5r":0.53},{"m":"1962-08","y":3.98,"h1":3.81,"h1r":2.45,"h3":3.38,"h3r":1.94,"h5":2.28,"h5r":0.25},{"m":"1962-09","y":3.98,"h1":3.14,"h1r":2.13,"h3":3.28,"h3r":1.95,"h5":2.28,"h5r":0.25},{"m":"1962-10","y":3.93,"h1":2.48,"h1r":1.15,"h3":2.98,"h3r":1.56,"h5":1.94,"h5r":-0.14},{"m":"1962-11","y":3.92,"h1":2.33,"h1r":1.0,"h3":2.7,"h3r":1.27,"h5":1.53,"h5r":-0.6},{"m":"1962-12","y":3.86,"h1":1.77,"h1r":0.12,"h3":2.08,"h3r":0.56,"h5":1.54,"h5r":-0.65},{"m":"1963-01","y":3.83,"h1":1.21,"h1r":-0.42,"h3":2.05,"h3r":0.53,"h5":1.78,"h5r":-0.53},{"m":"1963-02","y":3.92,"h1":2.15,"h1r":0.5,"h3":1.73,"h3r":0.01,"h5":1.91,"h5r":-0.46},{"m":"1963-03","y":3.93,"h1":1.68,"h1r":0.37,"h3":1.68,"h3r":-0.04,"h5":1.68,"h5r":-0.68},{"m":"1963-04","y":3.97,"h1":1.95,"h1r":0.64,"h3":2.13,"h3r":0.2,"h5":1.93,"h5r":-0.5},{"m":"1963-05","y":3.93,"h1":1.89,"h1r":0.57,"h3":1.97,"h3r":0.04,"h5":1.54,"h5r":-0.93},{"m":"1963-06","y":3.99,"h1":2.66,"h1r":1.33,"h3":2.08,"h3r":0.15,"h5":1.9,"h5r":-0.64},{"m":"1963-07","y":4.02,"h1":2.76,"h1r":1.44,"h3":1.63,"h3r":-0.28,"h5":2.31,"h5r":-0.28},{"m":"1963-08","y":4.0,"h1":2.61,"h1r":1.61,"h3":1.08,"h3r":-1.02,"h5":2.42,"h5r":-0.23},{"m":"1963-09","y":4.08,"h1":3.2,"h1r":1.88,"h3":1.44,"h3r":-0.68,"h5":2.52,"h5r":-0.19},{"m":"1963-10","y":4.11,"h1":3.55,"h1r":2.55,"h3":1.99,"h3r":-0.23,"h5":2.41,"h5r":-0.35},{"m":"1963-11","y":4.12,"h1":3.97,"h1r":2.64,"h3":1.65,"h3r":-0.56,"h5":2.26,"h5r":-0.55},{"m":"1963-12","y":4.13,"h1":3.81,"h1r":2.81,"h3":2.54,"h3r":0.42,"h5":1.8,"h5r":-0.98},{"m":"1964-01","y":4.17,"h1":4.06,"h1r":3.06,"h3":3.37,"h3r":1.23,"h5":1.89,"h5r":-0.96},{"m":"1964-02","y":4.15,"h1":3.73,"h1r":2.73,"h3":3.19,"h3r":1.05,"h5":1.66,"h5r":-1.29},{"m":"1964-03","y":4.22,"h1":4.32,"h1r":2.99,"h3":3.64,"h3r":1.39,"h5":1.65,"h5r":-1.47},{"m":"1964-04","y":4.23,"h1":4.49,"h1r":2.82,"h3":3.54,"h3r":1.19,"h5":1.89,"h5r":-1.34},{"m":"1964-05","y":4.2,"h1":4.15,"h1r":2.49,"h3":2.76,"h3r":0.33,"h5":1.65,"h5r":-1.63},{"m":"1964-06","y":4.17,"h1":3.9,"h1r":1.93,"h3":2.25,"h3r":-0.16,"h5":1.27,"h5r":-2.04},{"m":"1964-07","y":4.19,"h1":4.15,"h1r":2.51,"h3":1.96,"h3r":-0.44,"h5":1.12,"h5r":-2.22},{"m":"1964-08","y":4.19,"h1":3.74,"h1r":1.77,"h3":1.68,"h3r":-0.92,"h5":1.21,"h5r":-2.31},{"m":"1964-09","y":4.2,"h1":3.5,"h1r":1.86,"h3":1.68,"h3r":-0.9,"h5":0.59,"h5r":-2.9},{"m":"1964-10","y":4.19,"h1":2.93,"h1r":0.98,"h3":1.22,"h3r":-1.45,"h5":0.71,"h5r":-2.89},{"m":"1964-11","y":4.15,"h1":1.8,"h1r":0.19,"h3":0.47,"h3r":-2.18,"h5":0.64,"h5r":-3.0},{"m":"1964-12","y":4.18,"h1":0.7,"h1r":-1.2,"h3":0.72,"h3r":-2.03,"h5":0.02,"h5r":-3.69},{"m":"1965-01","y":4.19,"h1":0.9,"h1r":-1.0,"h3":1.21,"h3r":-1.74,"h5":-0.1,"h5r":-3.86},{"m":"1965-02","y":4.21,"h1":-0.63,"h1r":-3.12,"h3":1.23,"h3r":-1.82,"h5":0.75,"h5r":-3.15},{"m":"1965-03","y":4.21,"h1":-0.89,"h1r":-3.36,"h3":0.81,"h3r":-2.22,"h5":1.03,"h5r":-2.91},{"m":"1965-04","y":4.2,"h1":0.01,"h1r":-2.78,"h3":1.08,"h3r":-1.95,"h5":0.61,"h5r":-3.41},{"m":"1965-05","y":4.21,"h1":-0.1,"h1r":-2.88,"h3":0.57,"h3r":-2.54,"h5":-0.03,"h5r":-4.08},{"m":"1965-06","y":4.21,"h1":-0.28,"h1r":-2.75,"h3":0.98,"h3r":-2.12,"h5":0.12,"h5r":-3.91},{"m":"1965-07","y":4.2,"h1":-1.93,"h1r":-4.65,"h3":1.55,"h3r":-1.75,"h5":0.68,"h5r":-3.47},{"m":"1965-08","y":4.25,"h1":-2.97,"h1r":-6.24,"h3":1.93,"h3r":-1.48,"h5":0.72,"h5r":-3.43},{"m":"1965-09","y":4.29,"h1":-2.29,"h1r":-5.58,"h3":1.97,"h3r":-1.54,"h5":1.03,"h5r":-3.23},{"m":"1965-10","y":4.35,"h1":-0.46,"h1r":-4.09,"h3":1.86,"h3r":-1.73,"h5":1.26,"h5r":-3.05},{"m":"1965-11","y":4.45,"h1":-0.77,"h1r":-4.39,"h3":1.85,"h3r":-1.83,"h5":2.17,"h5r":-2.28},{"m":"1965-12","y":4.62,"h1":3.14,"h1r":-0.31,"h3":1.51,"h3r":-2.14,"h5":3.14,"h5r":-1.39},{"m":"1966-01","y":4.61,"h1":5.18,"h1r":1.67,"h3":1.5,"h3r":-2.25,"h5":3.38,"h5r":-1.16},{"m":"1966-02","y":4.83,"h1":6.59,"h1r":3.68,"h3":1.75,"h3r":-1.98,"h5":3.96,"h5r":-0.53},{"m":"1966-03","y":4.87,"h1":7.67,"h1r":4.73,"h3":1.62,"h3r":-2.28,"h5":4.67,"h5r":0.17},{"m":"1966-04","y":4.75,"h1":6.22,"h1r":3.65,"h3":1.67,"h3r":-2.22,"h5":4.29,"h5r":-0.13},{"m":"1966-05","y":4.78,"h1":4.3,"h1r":1.48,"h3":1.41,"h3r":-2.55,"h5":3.5,"h5r":-0.98},{"m":"1966-06","y":4.81,"h1":3.18,"h1r":0.39,"h3":0.92,"h3r":-3.09,"h5":3.38,"h5r":-1.18},{"m":"1966-07","y":5.02,"h1":3.77,"h1r":0.98,"h3":1.16,"h3r":-2.94,"h5":3.43,"h5r":-1.12},{"m":"1966-08","y":5.22,"h1":4.43,"h1r":1.94,"h3":1.8,"h3r":-2.31,"h5":4.0,"h5r":-0.5},{"m":"1966-09","y":5.18,"h1":3.96,"h1r":1.18,"h3":0.61,"h3r":-3.53,"h5":4.62,"h5r":0.09},{"m":"1966-10","y":5.01,"h1":1.23,"h1r":-1.17,"h3":0.37,"h3r":-3.74,"h5":4.69,"h5r":0.23},{"m":"1966-11","y":5.16,"h1":0.39,"h1r":-2.28,"h3":0.72,"h3r":-3.58,"h5":5.13,"h5r":0.65},{"m":"1966-12","y":4.84,"h1":-1.63,"h1r":-4.54,"h3":-1.22,"h3r":-5.61,"h5":4.44,"h5r":-0.1},{"m":"1967-01","y":4.58,"h1":-2.31,"h1r":-5.74,"h3":-2.12,"h3r":-6.55,"h5":4.01,"h5r":-0.52},{"m":"1967-02","y":4.63,"h1":-2.07,"h1r":-5.79,"h3":-0.68,"h3r":-5.33,"h5":3.91,"h5r":-0.71},{"m":"1967-03","y":4.54,"h1":-3.99,"h1r":-7.63,"h3":-0.45,"h3r":-5.19,"h5":3.81,"h5r":-0.8},{"m":"1967-04","y":4.59,"h1":-2.79,"h1r":-6.47,"h3":-0.99,"h3r":-5.85,"h5":3.73,"h5r":-0.86},{"m":"1967-05","y":4.85,"h1":-2.39,"h1r":-6.07,"h3":-1.42,"h3r":-6.25,"h5":4.27,"h5r":-0.33},{"m":"1967-06","y":5.02,"h1":0.09,"h1r":-3.95,"h3":-0.75,"h3r":-5.68,"h5":4.6,"h5r":0.0},{"m":"1967-07","y":5.16,"h1":2.91,"h1r":-1.51,"h3":0.55,"h3r":-4.52,"h5":4.85,"h5r":0.2},{"m":"1967-08","y":5.28,"h1":4.52,"h1r":0.04,"h3":0.76,"h3r":-4.22,"h5":4.9,"h5r":0.26},{"m":"1967-09","y":5.3,"h1":4.37,"h1r":-0.09,"h3":1.19,"h3r":-3.88,"h5":4.43,"h5r":-0.17},{"m":"1967-10","y":5.48,"h1":4.87,"h1r":0.11,"h3":1.85,"h3r":-3.32,"h5":4.84,"h5r":0.18},{"m":"1967-11","y":5.75,"h1":6.07,"h1r":1.27,"h3":3.77,"h3r":-1.57,"h5":5.59,"h5r":0.91},{"m":"1967-12","y":5.7,"h1":3.11,"h1r":-1.54,"h3":4.78,"h3r":-0.68,"h5":5.4,"h5r":0.74},{"m":"1968-01","y":5.53,"h1":1.76,"h1r":-2.53,"h3":4.73,"h3r":-0.52,"h5":4.99,"h5r":0.42},{"m":"1968-02","y":5.56,"h1":0.91,"h1r":-3.6,"h3":5.17,"h3r":-0.1,"h5":4.78,"h5r":0.14},{"m":"1968-03","y":5.74,"h1":1.52,"h1r":-3.54,"h3":6.72,"h3r":1.39,"h5":4.98,"h5r":0.2},{"m":"1968-04","y":5.64,"h1":1.77,"h1r":-3.56,"h3":6.11,"h3r":0.83,"h5":4.9,"h5r":0.04},{"m":"1968-05","y":5.87,"h1":2.45,"h1r":-2.9,"h3":5.27,"h3r":-0.05,"h5":5.01,"h5r":0.07},{"m":"1968-06","y":5.72,"h1":-0.46,"h1r":-5.63,"h3":4.56,"h3r":-0.77,"h5":4.72,"h5r":-0.23},{"m":"1968-07","y":5.5,"h1":-3.06,"h1r":-8.07,"h3":3.5,"h3r":-1.68,"h5":4.06,"h5r":-0.79},{"m":"1968-08","y":5.42,"h1":-3.34,"h1r":-8.57,"h3":3.69,"h3r":-1.48,"h5":3.57,"h5r":-1.55},{"m":"1968-09","y":5.46,"h1":-6.13,"h1r":-11.19,"h3":4.93,"h3r":-0.21,"h5":4.11,"h5r":-1.02},{"m":"1968-10","y":5.58,"h1":-4.75,"h1r":-9.86,"h3":5.81,"h3r":0.74,"h5":4.77,"h5r":-0.46},{"m":"1968-11","y":5.7,"h1":-4.04,"h1r":-9.42,"h3":6.45,"h3r":1.44,"h5":5.06,"h5r":-0.25},{"m":"1968-12","y":6.03,"h1":-4.97,"h1r":-10.52,"h3":7.01,"h3r":1.91,"h5":5.58,"h5r":0.17},{"m":"1969-01","y":6.04,"h1":-5.68,"h1r":-11.17,"h3":6.98,"h3r":1.98,"h5":5.24,"h5r":-0.28},{"m":"1969-02","y":6.19,"h1":-0.85,"h1r":-6.59,"h3":7.03,"h3r":2.05,"h5":5.53,"h5r":-0.15},{"m":"1969-03","y":6.3,"h1":1.22,"h1r":-4.35,"h3":7.34,"h3r":2.54,"h5":5.34,"h5r":-0.41},{"m":"1969-04","y":6.17,"h1":-1.89,"h1r":-7.49,"h3":6.68,"h3r":2.02,"h5":4.72,"h5r":-0.97},{"m":"1969-05","y":6.32,"h1":-4.19,"h1r":-9.65,"h3":7.23,"h3r":2.56,"h5":4.87,"h5r":-1.02},{"m":"1969-06","y":6.57,"h1":-1.86,"h1r":-7.42,"h3":7.92,"h3r":3.33,"h5":5.33,"h5r":-0.64},{"m":"1969-07","y":6.72,"h1":1.9,"h1r":-3.85,"h3":8.29,"h3r":3.71,"h5":5.19,"h5r":-0.83},{"m":"1969-08","y":6.69,"h1":1.25,"h1r":-3.94,"h3":7.94,"h3r":3.47,"h5":4.83,"h5r":-1.29},{"m":"1969-09","y":7.16,"h1":5.77,"h1r":0.1,"h3":8.23,"h3r":3.77,"h5":5.56,"h5r":-0.79},{"m":"1969-10","y":7.1,"h1":5.78,"h1r":0.15,"h3":8.25,"h3r":3.8,"h5":5.68,"h5r":-0.77},{"m":"1969-11","y":7.14,"h1":9.78,"h1r":3.96,"h3":8.85,"h3r":4.48,"h5":6.07,"h5r":-0.45},{"m":"1969-12","y":7.65,"h1":17.4,"h1r":11.21,"h3":9.91,"h3r":5.6,"h5":7.2,"h5r":0.56},{"m":"1970-01","y":7.79,"h1":19.7,"h1r":13.69,"h3":9.95,"h3r":5.66,"h5":7.3,"h5r":0.63},{"m":"1970-02","y":7.24,"h1":16.25,"h1r":10.71,"h3":8.08,"h3r":3.8,"h5":6.65,"h5r":-0.02},{"m":"1970-03","y":7.07,"h1":18.29,"h1r":12.96,"h3":7.46,"h3r":3.06,"h5":5.91,"h5r":-0.7},{"m":"1970-04","y":7.39,"h1":19.66,"h1r":14.89,"h3":8.35,"h3r":3.95,"h5":5.67,"h5r":-0.83},{"m":"1970-05","y":7.91,"h1":18.84,"h1r":13.83,"h3":9.16,"h3r":4.58,"h5":6.69,"h5r":0.06},{"m":"1970-06","y":7.84,"h1":17.03,"h1r":11.84,"h3":8.83,"h3r":4.21,"h5":6.88,"h5r":0.19},{"m":"1970-07","y":7.46,"h1":12.23,"h1r":7.54,"h3":7.29,"h3r":2.83,"h5":6.04,"h5r":-0.72},{"m":"1970-08","y":7.53,"h1":13.91,"h1r":8.89,"h3":6.78,"h3r":1.73,"h5":5.67,"h5r":-1.1},{"m":"1970-09","y":7.39,"h1":16.36,"h1r":11.8,"h3":7.2,"h3r":2.23,"h5":5.44,"h5r":-1.32},{"m":"1970-10","y":7.33,"h1":17.56,"h1r":13.25,"h3":7.8,"h3r":2.67,"h5":5.78,"h5r":-1.01},{"m":"1970-11","y":6.84,"h1":14.5,"h1r":10.86,"h3":6.72,"h3r":1.59,"h5":5.2,"h5r":-1.6},{"m":"1970-12","y":6.39,"h1":9.82,"h1r":6.35,"h3":5.56,"h3r":0.44,"h5":4.62,"h5r":-2.11},{"m":"1971-01","y":6.24,"h1":8.44,"h1r":5.01,"h3":4.57,"h3r":-0.79,"h5":4.78,"h5r":-1.99},{"m":"1971-02","y":6.11,"h1":6.37,"h1r":2.76,"h3":4.33,"h3r":-1.35,"h5":4.54,"h5r":-2.24},{"m":"1971-03","y":5.7,"h1":3.28,"h1r":-0.21,"h3":2.71,"h3r":-3.21,"h5":4.02,"h5r":-2.71},{"m":"1971-04","y":5.83,"h1":3.41,"h1r":-0.08,"h3":2.37,"h3r":-3.59,"h5":4.5,"h5r":-2.29},{"m":"1971-05","y":6.39,"h1":8.28,"h1r":4.89,"h3":3.67,"h3r":-2.6,"h5":4.91,"h5r":-1.95},{"m":"1971-06","y":6.52,"h1":9.43,"h1r":6.55,"h3":4.12,"h3r":-2.2,"h5":5.19,"h5r":-1.64},{"m":"1971-07","y":6.73,"h1":11.06,"h1r":7.88,"h3":4.03,"h3r":-2.47,"h5":5.57,"h5r":-1.34},{"m":"1971-08","y":6.58,"h1":9.02,"h1r":5.91,"h3":3.16,"h3r":-3.6,"h5":5.45,"h5r":-1.51},{"m":"1971-09","y":6.14,"h1":3.02,"h1r":-0.16,"h3":2.12,"h3r":-4.95,"h5":5.06,"h5r":-1.94},{"m":"1971-10","y":5.93,"h1":1.99,"h1r":-1.39,"h3":1.96,"h3r":-5.33,"h5":5.02,"h5r":-2.03},{"m":"1971-11","y":5.81,"h1":2.6,"h1r":-1.03,"h3":2.22,"h3r":-5.34,"h5":5.04,"h5r":-2.05},{"m":"1971-12","y":5.93,"h1":2.96,"h1r":-0.43,"h3":3.16,"h3r":-4.56,"h5":5.87,"h5r":-1.25},{"m":"1972-01","y":5.95,"h1":2.4,"h1r":-1.2,"h3":3.09,"h3r":-4.75,"h5":5.41,"h5r":-1.78},{"m":"1972-02","y":6.08,"h1":2.1,"h1r":-1.71,"h3":3.72,"h3r":-4.25,"h5":5.37,"h5r":-1.92},{"m":"1972-03","y":6.07,"h1":1.57,"h1r":-2.89,"h3":2.93,"h3r":-5.03,"h5":5.27,"h5r":-2.09},{"m":"1972-04","y":6.19,"h1":2.81,"h1r":-2.14,"h3":2.12,"h3r":-5.82,"h5":5.61,"h5r":-1.9},{"m":"1972-05","y":6.13,"h1":1.09,"h1r":-4.2,"h3":2.41,"h3r":-5.65,"h5":5.41,"h5r":-2.13},{"m":"1972-06","y":6.11,"h1":0.65,"h1r":-5.04,"h3":2.88,"h3r":-5.38,"h5":5.66,"h5r":-1.98},{"m":"1972-07","y":6.11,"h1":-0.91,"h1r":-6.27,"h3":2.46,"h3r":-5.96,"h5":5.61,"h5r":-2.03},{"m":"1972-08","y":6.21,"h1":-1.96,"h1r":-8.7,"h3":1.99,"h3r":-6.38,"h5":5.68,"h5r":-1.98},{"m":"1972-09","y":6.55,"h1":2.77,"h1r":-4.28,"h3":2.83,"h3r":-5.71,"h5":6.31,"h5r":-1.42},{"m":"1972-10","y":6.48,"h1":4.48,"h1r":-3.08,"h3":3.36,"h3r":-5.24,"h5":5.96,"h5r":-1.72},{"m":"1972-11","y":6.28,"h1":3.45,"h1r":-4.44,"h3":3.12,"h3r":-5.62,"h5":5.58,"h5r":-2.11},{"m":"1972-12","y":6.36,"h1":4.01,"h1r":-4.32,"h3":3.49,"h3r":-5.32,"h5":5.57,"h5r":-2.14},{"m":"1973-01","y":6.46,"h1":2.96,"h1r":-5.88,"h3":4.39,"h3r":-4.48,"h5":5.36,"h5r":-2.42},{"m":"1973-02","y":6.64,"h1":4.56,"h1r":-4.96,"h3":4.76,"h3r":-4.03,"h5":5.56,"h5r":-2.22},{"m":"1973-03","y":6.71,"h1":3.29,"h1r":-6.44,"h3":5.11,"h3r":-3.47,"h5":5.67,"h5r":-2.09},{"m":"1973-04","y":6.67,"h1":0.91,"h1r":-8.34,"h3":5.44,"h3r":-3.06,"h5":5.48,"h5r":-2.29},{"m":"1973-05","y":6.85,"h1":1.79,"h1r":-8.05,"h3":5.1,"h3r":-3.38,"h5":5.49,"h5r":-2.32},{"m":"1973-06","y":6.9,"h1":2.49,"h1r":-7.55,"h3":5.35,"h3r":-3.1,"h5":5.44,"h5r":-2.45},{"m":"1973-07","y":7.13,"h1":2.31,"h1r":-8.25,"h3":6.02,"h3r":-2.58,"h5":5.56,"h5r":-2.44},{"m":"1973-08","y":7.4,"h1":2.71,"h1r":-7.36,"h3":6.85,"h3r":-1.4,"h5":6.3,"h5r":-1.49},{"m":"1973-09","y":7.09,"h1":0.58,"h1r":-10.16,"h3":6.53,"h3r":-1.74,"h5":5.85,"h5r":-2.02},{"m":"1973-10","y":6.79,"h1":-0.51,"h1r":-11.22,"h3":6.24,"h3r":-1.89,"h5":5.12,"h5r":-2.69},{"m":"1973-11","y":6.73,"h1":0.64,"h1r":-10.3,"h3":6.4,"h3r":-1.58,"h5":4.83,"h5r":-2.92},{"m":"1973-12","y":6.74,"h1":2.52,"h1r":-8.74,"h3":7.48,"h3r":-0.48,"h5":4.61,"h5r":-3.09},{"m":"1974-01","y":6.99,"h1":3.91,"h1r":-7.06,"h3":7.26,"h3r":-0.57,"h5":4.9,"h5r":-2.82},{"m":"1974-02","y":6.96,"h1":4.52,"h1r":-6.03,"h3":6.75,"h3r":-0.96,"h5":4.89,"h5r":-2.81},{"m":"1974-03","y":7.21,"h1":3.95,"h1r":-5.71,"h3":7.22,"h3r":-0.33,"h5":5.27,"h5r":-2.41},{"m":"1974-04","y":7.51,"h1":2.65,"h1r":-6.86,"h3":8.19,"h3r":0.44,"h5":5.66,"h5r":-2.19},{"m":"1974-05","y":7.58,"h1":4.38,"h1r":-4.64,"h3":8.14,"h3r":0.63,"h5":5.69,"h5r":-2.16},{"m":"1974-06","y":7.54,"h1":5.54,"h1r":-3.51,"h3":8.48,"h3r":1.01,"h5":6.12,"h5r":-1.82},{"m":"1974-07","y":7.81,"h1":6.1,"h1r":-3.3,"h3":9.02,"h3r":1.62,"h5":6.48,"h5r":-1.54},{"m":"1974-08","y":8.04,"h1":5.36,"h1r":-2.98,"h3":9.39,"h3r":2.27,"h5":6.73,"h5r":-1.27},{"m":"1974-09","y":8.04,"h1":5.18,"h1r":-2.52,"h3":9.53,"h3r":2.69,"h5":6.33,"h5r":-1.61},{"m":"1974-10","y":7.9,"h1":6.25,"h1r":-1.11,"h3":8.71,"h3r":2.15,"h5":4.87,"h5r":-2.93},{"m":"1974-11","y":7.68,"h1":5.33,"h1r":-1.91,"h3":8.02,"h3r":1.59,"h5":4.16,"h5r":-3.61},{"m":"1974-12","y":7.43,"h1":3.93,"h1r":-2.81,"h3":7.13,"h3r":0.91,"h5":4.18,"h5r":-3.65},{"m":"1975-01","y":7.5,"h1":6.32,"h1r":-0.37,"h3":6.66,"h3r":0.38,"h5":3.81,"h5r":-4.19},{"m":"1975-02","y":7.39,"h1":5.18,"h1r":-1.04,"h3":6.23,"h3r":0.02,"h5":1.78,"h5r":-6.18},{"m":"1975-03","y":7.73,"h1":8.15,"h1r":1.96,"h3":7.06,"h3r":0.66,"h5":1.96,"h5r":-6.23},{"m":"1975-04","y":8.23,"h1":13.17,"h1r":6.71,"h3":8.02,"h3r":1.42,"h5":4.2,"h5r":-4.31},{"m":"1975-05","y":8.06,"h1":9.27,"h1r":2.89,"h3":7.13,"h3r":0.47,"h5":5.61,"h5r":-3.1},{"m":"1975-06","y":7.86,"h1":8.09,"h1r":2.0,"h3":6.4,"h3r":-0.32,"h5":5.88,"h5r":-2.92},{"m":"1975-07","y":8.06,"h1":9.78,"h1r":4.2,"h3":6.48,"h3r":-0.14,"h5":5.58,"h5r":-2.97},{"m":"1975-08","y":8.4,"h1":12.73,"h1r":6.65,"h3":7.84,"h3r":1.05,"h5":5.02,"h5r":-3.59},{"m":"1975-09","y":8.43,"h1":14.29,"h1r":8.34,"h3":7.89,"h3r":1.03,"h5":4.6,"h5r":-4.03},{"m":"1975-10","y":8.14,"h1":13.44,"h1r":7.56,"h3":6.69,"h3r":-0.21,"h5":3.97,"h5r":-4.69},{"m":"1975-11","y":8.05,"h1":13.63,"h1r":8.34,"h3":6.1,"h3r":-0.67,"h5":2.82,"h5r":-5.77},{"m":"1975-12","y":8.0,"h1":16.54,"h1r":11.13,"h3":5.54,"h3r":-1.22,"h5":2.64,"h5r":-6.03},{"m":"1976-01","y":7.74,"h1":11.7,"h1r":6.17,"h3":4.76,"h3r":-2.19,"h5":2.67,"h5r":-6.13},{"m":"1976-02","y":7.79,"h1":10.64,"h1r":4.47,"h3":4.91,"h3r":-2.3,"h5":2.12,"h5r":-6.75},{"m":"1976-03","y":7.73,"h1":9.63,"h1r":3.0,"h3":4.76,"h3r":-2.71,"h5":2.2,"h5r":-6.77},{"m":"1976-04","y":7.56,"h1":9.02,"h1r":1.93,"h3":4.27,"h3r":-3.43,"h5":1.44,"h5r":-7.53},{"m":"1976-05","y":7.9,"h1":10.87,"h1r":3.88,"h3":4.96,"h3r":-2.96,"h5":1.56,"h5r":-7.43},{"m":"1976-06","y":7.86,"h1":11.91,"h1r":4.72,"h3":5.67,"h3r":-2.5,"h5":2.28,"h5r":-6.84},{"m":"1976-07","y":7.83,"h1":11.25,"h1r":4.13,"h3":5.54,"h3r":-2.81,"h5":1.45,"h5r":-7.7},{"m":"1976-08","y":7.77,"h1":10.22,"h1r":3.37,"h3":5.24,"h3r":-3.21,"h5":0.79,"h5r":-8.34},{"m":"1976-09","y":7.59,"h1":9.29,"h1r":2.53,"h3":4.18,"h3r":-4.42,"h5":0.28,"h5r":-8.92},{"m":"1976-10","y":7.41,"h1":6.6,"h1r":0.2,"h3":1.72,"h3r":-6.77,"h5":0.32,"h5r":-8.83},{"m":"1976-11","y":7.29,"h1":5.3,"h1r":-1.34,"h3":0.81,"h3r":-7.84,"h5":2.1,"h5r":-7.24},{"m":"1976-12","y":6.87,"h1":1.52,"h1r":-4.86,"h3":0.44,"h3r":-8.39,"h5":1.24,"h5r":-8.01},{"m":"1977-01","y":7.21,"h1":2.16,"h1r":-4.38,"h3":0.51,"h3r":-8.6,"h5":0.92,"h5r":-8.27},{"m":"1977-02","y":7.39,"h1":3.02,"h1r":-3.2,"h3":-2.09,"h3r":-11.08,"h5":1.45,"h5r":-7.66},{"m":"1977-03","y":7.46,"h1":3.5,"h1r":-2.87,"h3":-2.42,"h3r":-11.62,"h5":2.27,"h5r":-6.77},{"m":"1977-04","y":7.37,"h1":2.15,"h1r":-4.08,"h3":-0.14,"h3r":-9.64,"h5":2.23,"h5r":-6.73},{"m":"1977-05","y":7.46,"h1":1.5,"h1r":-5.11,"h3":2.74,"h3r":-7.19,"h5":2.73,"h5r":-6.35},{"m":"1977-06","y":7.28,"h1":-0.41,"h1r":-7.28,"h3":3.23,"h3r":-6.88,"h5":1.85,"h5r":-7.27},{"m":"1977-07","y":7.33,"h1":-1.15,"h1r":-8.22,"h3":2.42,"h3r":-7.46,"h5":2.4,"h5r":-6.76},{"m":"1977-08","y":7.4,"h1":0.95,"h1r":-6.39,"h3":0.93,"h3r":-8.93,"h5":3.58,"h5r":-5.67},{"m":"1977-09","y":7.34,"h1":0.54,"h1r":-7.17,"h3":0.09,"h3r":-9.84,"h5":4.41,"h5r":-4.89},{"m":"1977-10","y":7.52,"h1":0.43,"h1r":-7.8,"h3":0.15,"h3r":-9.97,"h5":6.46,"h5r":-3.02},{"m":"1977-11","y":7.58,"h1":-0.18,"h1r":-8.33,"h3":-1.34,"h3r":-11.41,"h5":7.07,"h5r":-2.33},{"m":"1977-12","y":7.69,"h1":-0.62,"h1r":-8.84,"h3":-1.25,"h3r":-11.51,"h5":7.29,"h5r":-1.98},{"m":"1978-01","y":7.96,"h1":0.74,"h1r":-7.81,"h3":-0.02,"h3r":-10.45,"h5":7.84,"h5r":-1.4},{"m":"1978-02","y":8.03,"h1":1.31,"h1r":-7.78,"h3":-0.87,"h3r":-11.33,"h5":7.65,"h5r":-1.47},{"m":"1978-03","y":8.04,"h1":1.33,"h1r":-7.96,"h3":-0.59,"h3r":-11.05,"h5":7.98,"h5r":-1.01},{"m":"1978-04","y":8.15,"h1":1.78,"h1r":-7.88,"h3":-1.2,"h3r":-11.57,"h5":8.32,"h5r":-0.68},{"m":"1978-05","y":8.35,"h1":2.77,"h1r":-7.29,"h3":-1.35,"h3r":-11.65,"h5":8.68,"h5r":-0.29},{"m":"1978-06","y":8.46,"h1":5.86,"h1r":-4.53,"h3":0.14,"h3r":-10.26,"h5":8.26,"h5r":-0.52},{"m":"1978-07","y":8.64,"h1":6.89,"h1r":-3.93,"h3":-0.76,"h3r":-11.17,"h5":7.88,"h5r":-0.8},{"m":"1978-08","y":8.41,"h1":4.78,"h1r":-6.3,"h3":-2.22,"h3r":-12.56,"h5":7.02,"h5r":-1.56},{"m":"1978-09","y":8.42,"h1":2.9,"h1r":-8.27,"h3":-2.65,"h3r":-13.01,"h5":7.33,"h5r":-1.21},{"m":"1978-10","y":8.64,"h1":-1.68,"h1r":-12.27,"h3":-1.72,"h3r":-11.98,"h5":7.84,"h5r":-0.63},{"m":"1978-11","y":8.81,"h1":-2.54,"h1r":-13.45,"h3":1.81,"h3r":-8.78,"h5":7.94,"h5r":-0.49},{"m":"1978-12","y":9.01,"h1":0.43,"h1r":-11.36,"h3":1.78,"h3r":-8.77,"h5":8.09,"h5r":-0.28},{"m":"1979-01","y":9.1,"h1":-1.35,"h1r":-13.39,"h3":0.57,"h3r":-9.69,"h5":8.47,"h5r":0.12},{"m":"1979-02","y":9.1,"h1":-10.07,"h1r":-21.24,"h3":0.99,"h3r":-9.05,"h5":8.3,"h5r":0.11},{"m":"1979-03","y":9.12,"h1":-11.4,"h1r":-22.8,"h3":2.17,"h3r":-7.65,"h5":7.79,"h5r":-0.21},{"m":"1979-04","y":9.18,"h1":-4.21,"h1r":-16.51,"h3":2.41,"h3r":-7.21,"h5":7.55,"h5r":-0.29},{"m":"1979-05","y":9.25,"h1":3.97,"h1r":-9.12,"h3":3.14,"h3r":-6.44,"h5":6.79,"h5r":-0.8},{"m":"1979-06","y":8.91,"h1":4.34,"h1r":-8.78,"h3":1.3,"h3r":-8.15,"h5":6.23,"h5r":-1.16},{"m":"1979-07","y":8.95,"h1":1.69,"h1r":-10.11,"h3":2.15,"h3r":-7.2,"h5":6.59,"h5r":-0.69},{"m":"1979-08","y":9.03,"h1":-2.79,"h1r":-13.88,"h3":4.08,"h3r":-5.21,"h5":7.51,"h5r":0.29},{"m":"1979-09","y":9.33,"h1":-3.09,"h1r":-13.94,"h3":6.24,"h3r":-2.96,"h5":8.23,"h5r":1.08},{"m":"1979-10","y":10.3,"h1":1.74,"h1r":-9.78,"h3":11.48,"h3r":1.99,"h5":10.05,"h5r":2.88},{"m":"1979-11","y":10.65,"h1":-1.29,"h1r":-12.37,"h3":13.09,"h3r":3.85,"h5":11.29,"h5r":4.23},{"m":"1979-12","y":10.39,"h1":-3.51,"h1r":-14.25,"h3":12.52,"h3r":3.83,"h5":11.05,"h5r":4.23},{"m":"1980-01","y":10.8,"h1":0.57,"h1r":-10.07,"h3":13.64,"h3r":5.29,"h5":11.77,"h5r":5.17},{"m":"1980-02","y":12.41,"h1":6.93,"h1r":-4.02,"h3":16.63,"h3r":8.54,"h5":13.73,"h5r":7.21},{"m":"1980-03","y":12.75,"h1":9.44,"h1r":-0.95,"h3":17.8,"h3r":10.18,"h5":13.68,"h5r":7.41},{"m":"1980-04","y":11.47,"h1":-1.08,"h1r":-10.08,"h3":15.22,"h3r":7.91,"h5":12.61,"h5r":6.53},{"m":"1980-05","y":10.18,"h1":-10.14,"h1r":-18.15,"h3":12.37,"h3r":5.37,"h5":11.67,"h5r":5.77},{"m":"1980-06","y":9.78,"h1":-9.1,"h1r":-17.03,"h3":10.41,"h3r":3.81,"h5":12.06,"h5r":6.31},{"m":"1980-07","y":10.25,"h1":-10.08,"h1r":-18.81,"h3":10.36,"h3r":3.62,"h5":12.51,"h5r":6.7},{"m":"1980-08","y":11.1,"h1":-8.2,"h1r":-17.15,"h3":11.28,"h3r":4.64,"h5":13.64,"h5r":7.89},{"m":"1980-09","y":11.51,"h1":-7.47,"h1r":-16.61,"h3":12.62,"h3r":6.02,"h5":14.12,"h5r":8.46},{"m":"1980-10","y":11.75,"h1":-5.11,"h1r":-13.85,"h3":13.39,"h3r":6.97,"h5":14.59,"h5r":9.04},{"m":"1980-11","y":12.68,"h1":9.7,"h1r":0.1,"h3":15.05,"h3r":8.77,"h5":16.43,"h5r":10.91},{"m":"1980-12","y":12.84,"h1":8.8,"h1r":-0.11,"h3":15.05,"h3r":9.07,"h5":17.34,"h5r":11.93},{"m":"1981-01","y":12.57,"h1":2.52,"h1r":-5.42,"h3":14.81,"h3r":8.91,"h5":17.03,"h5r":11.75},{"m":"1981-02","y":13.19,"h1":7.1,"h1r":-0.48,"h3":15.71,"h3r":9.97,"h5":18.51,"h5r":13.46},{"m":"1981-03","y":13.12,"h1":9.99,"h1r":3.01,"h3":14.48,"h3r":8.98,"h5":19.78,"h5r":14.93},{"m":"1981-04","y":13.68,"h1":13.36,"h1r":6.43,"h3":14.95,"h3r":9.49,"h5":21.19,"h5r":16.48},{"m":"1981-05","y":14.1,"h1":17.44,"h1r":10.08,"h3":14.13,"h3r":8.89,"h5":20.91,"h5r":16.34},{"m":"1981-06","y":13.47,"h1":9.6,"h1r":2.37,"h3":12.57,"h3r":7.61,"h5":19.85,"h5r":15.39},{"m":"1981-07","y":14.28,"h1":16.55,"h1r":9.5,"h3":14.59,"h3r":9.81,"h5":21.6,"h5r":17.33},{"m":"1981-08","y":14.94,"h1":26.33,"h1r":19.35,"h3":17.2,"h3r":12.45,"h5":22.51,"h5r":18.35},{"m":"1981-09","y":15.32,"h1":33.73,"h1r":27.31,"h3":18.31,"h3r":13.7,"h5":22.35,"h5r":18.31},{"m":"1981-10","y":15.15,"h1":43.48,"h1r":36.47,"h3":18.68,"h3r":14.03,"h5":22.02,"h5r":18.03},{"m":"1981-11","y":13.39,"h1":33.55,"h1r":27.69,"h3":16.38,"h3r":11.94,"h5":20.0,"h5r":16.13},{"m":"1981-12","y":13.72,"h1":35.7,"h1r":30.69,"h3":17.17,"h3r":12.82,"h5":20.54,"h5r":16.7},{"m":"1982-01","y":14.59,"h1":42.33,"h1r":37.24,"h3":19.16,"h3r":14.78,"h5":21.56,"h5r":17.62},{"m":"1982-02","y":14.43,"h1":38.53,"h1r":33.86,"h3":18.44,"h3r":14.03,"h5":20.93,"h5r":17.0},{"m":"1982-03","y":13.86,"h1":35.81,"h1r":31.1,"h3":16.41,"h3r":11.9,"h5":20.09,"h5r":16.05},{"m":"1982-04","y":13.87,"h1":36.43,"h1r":31.31,"h3":17.33,"h3r":12.76,"h5":18.71,"h5r":14.7},{"m":"1982-05","y":13.62,"h1":34.44,"h1r":29.84,"h3":18.06,"h3r":13.68,"h5":17.36,"h5r":13.53},{"m":"1982-06","y":14.3,"h1":35.1,"h1r":31.71,"h3":21.04,"h3r":16.93,"h5":18.43,"h5r":14.77},{"m":"1982-07","y":13.95,"h1":28.24,"h1r":25.16,"h3":19.82,"h3r":15.87,"h5":17.82,"h5r":14.23},{"m":"1982-08","y":13.06,"h1":18.83,"h1r":15.87,"h3":17.79,"h3r":13.92,"h5":16.14,"h5r":12.53},{"m":"1982-09","y":12.34,"h1":15.45,"h1r":12.24,"h3":16.08,"h3r":12.24,"h5":14.17,"h5r":10.56},{"m":"1982-10","y":10.91,"h1":7.07,"h1r":4.1,"h3":13.22,"h3r":9.45,"h5":12.14,"h5r":8.6},{"m":"1982-11","y":10.55,"h1":3.95,"h1r":0.66,"h3":13.46,"h3r":9.5,"h5":12.57,"h5r":8.95},{"m":"1982-12","y":10.54,"h1":3.15,"h1r":-0.61,"h3":14.64,"h3r":10.4,"h5":12.34,"h5r":8.64},{"m":"1983-01","y":10.46,"h1":3.71,"h1r":-0.47,"h3":14.59,"h3r":10.32,"h5":12.67,"h5r":8.95},{"m":"1983-02","y":10.72,"h1":4.42,"h1r":-0.17,"h3":16.36,"h3r":12.17,"h5":13.67,"h5r":9.88},{"m":"1983-03","y":10.51,"h1":0.44,"h1r":-4.16,"h3":18.17,"h3r":14.09,"h5":13.1,"h5r":9.24},{"m":"1983-04","y":10.4,"h1":-1.79,"h1r":-6.07,"h3":19.12,"h3r":15.34,"h5":12.4,"h5r":8.6},{"m":"1983-05","y":10.38,"h1":-5.83,"h1r":-9.66,"h3":17.86,"h3r":14.25,"h5":11.8,"h5r":8.08},{"m":"1983-06","y":10.85,"h1":-3.67,"h1r":-7.57,"h3":18.65,"h3r":14.92,"h5":12.66,"h5r":8.88},{"m":"1983-07","y":11.38,"h1":0.66,"h1r":-3.4,"h3":21.16,"h3r":17.51,"h5":13.13,"h5r":9.33},{"m":"1983-08","y":11.85,"h1":7.23,"h1r":2.82,"h3":22.49,"h3r":18.85,"h5":13.41,"h5r":9.57},{"m":"1983-09","y":11.65,"h1":7.26,"h1r":2.87,"h3":21.09,"h3r":17.5,"h5":13.51,"h5r":9.63},{"m":"1983-10","y":11.54,"h1":8.82,"h1r":4.37,"h3":20.76,"h3r":17.26,"h5":13.58,"h5r":9.69},{"m":"1983-11","y":11.69,"h1":13.54,"h1r":9.12,"h3":21.47,"h3r":18.0,"h5":13.49,"h5r":9.63},{"m":"1983-12","y":11.83,"h1":14.91,"h1r":10.54,"h3":22.05,"h3r":18.56,"h5":13.41,"h5r":9.54},{"m":"1984-01","y":11.67,"h1":14.63,"h1r":10.71,"h3":21.61,"h3r":18.12,"h5":13.18,"h5r":9.34},{"m":"1984-02","y":11.84,"h1":14.85,"h1r":10.95,"h3":21.38,"h3r":17.95,"h5":13.24,"h5r":9.41},{"m":"1984-03","y":12.32,"h1":15.63,"h1r":11.51,"h3":22.33,"h3r":18.77,"h5":13.53,"h5r":9.61},{"m":"1984-04","y":12.63,"h1":20.53,"h1r":16.25,"h3":20.72,"h3r":17.19,"h5":14.13,"h5r":10.15},{"m":"1984-05","y":13.41,"h1":29.98,"h1r":25.25,"h3":20.7,"h3r":17.15,"h5":15.52,"h5r":11.43},{"m":"1984-06","y":13.56,"h1":36.27,"h1r":31.33,"h3":21.43,"h3r":17.83,"h5":16.49,"h5r":12.38},{"m":"1984-07","y":13.36,"h1":33.24,"h1r":28.67,"h3":20.7,"h3r":17.17,"h5":16.55,"h5r":12.47},{"m":"1984-08","y":12.72,"h1":28.25,"h1r":24.1,"h3":18.36,"h3r":14.84,"h5":15.51,"h5r":11.52},{"m":"1984-09","y":12.52,"h1":26.3,"h1r":22.46,"h3":16.14,"h3r":12.67,"h5":15.05,"h5r":11.11},{"m":"1984-10","y":12.16,"h1":24.57,"h1r":20.67,"h3":15.03,"h3r":11.61,"h5":14.79,"h5r":10.81},{"m":"1984-11","y":11.57,"h1":23.73,"h1r":19.53,"h3":15.28,"h3r":11.81,"h5":14.16,"h5r":10.15},{"m":"1984-12","y":11.5,"h1":27.12,"h1r":22.47,"h3":14.72,"h3r":11.27,"h5":14.05,"h5r":10.01},{"m":"1985-01","y":11.38,"h1":26.58,"h1r":21.85,"h3":15.17,"h3r":11.68,"h5":13.26,"h5r":9.07},{"m":"1985-02","y":11.51,"h1":31.38,"h1r":27.41,"h3":16.54,"h3r":13.09,"h5":12.98,"h5r":8.8},{"m":"1985-03","y":11.86,"h1":42.09,"h1r":38.95,"h3":16.8,"h3r":13.33,"h5":13.2,"h5r":8.98},{"m":"1985-04","y":11.43,"h1":42.78,"h1r":40.55,"h3":14.86,"h3r":11.42,"h5":12.3,"h5r":8.17},{"m":"1985-05","y":10.85,"h1":33.74,"h1r":31.78,"h3":12.59,"h3r":9.23,"h5":11.54,"h5r":7.47},{"m":"1985-06","y":10.16,"h1":27.23,"h1r":25.03,"h3":11.4,"h3r":8.03,"h5":10.99,"h5r":6.88},{"m":"1985-07","y":10.31,"h1":32.6,"h1r":30.54,"h3":11.37,"h3r":7.91,"h5":11.18,"h5r":7.02},{"m":"1985-08","y":10.33,"h1":33.64,"h1r":31.57,"h3":10.9,"h3r":7.38,"h5":10.76,"h5r":6.47},{"m":"1985-09","y":10.37,"h1":31.05,"h1r":28.79,"h3":11.62,"h3r":7.93,"h5":10.59,"h5r":6.18},{"m":"1985-10","y":10.24,"h1":29.9,"h1r":28.02,"h3":11.72,"h3r":8.04,"h5":10.63,"h5r":6.17},{"m":"1985-11","y":9.78,"h1":27.59,"h1r":25.97,"h3":10.25,"h3r":6.69,"h5":10.46,"h5r":6.02},{"m":"1985-12","y":9.26,"h1":24.47,"h1r":23.11,"h3":8.69,"h3r":5.22,"h5":10.17,"h5r":5.8},{"m":"1986-01","y":9.19,"h1":23.96,"h1r":22.18,"h3":8.57,"h3r":5.02,"h5":10.04,"h5r":5.6},{"m":"1986-02","y":8.7,"h1":18.51,"h1r":16.07,"h3":7.26,"h3r":3.51,"h5":9.68,"h5r":5.18},{"m":"1986-03","y":7.78,"h1":11.43,"h1r":8.15,"h3":4.71,"h3r":0.7,"h5":7.97,"h5r":3.41},{"m":"1986-04","y":7.3,"h1":2.22,"h1r":-1.5,"h3":4.01,"h3r":-0.25,"h5":7.37,"h5r":2.77},{"m":"1986-05","y":7.71,"h1":1.16,"h1r":-2.6,"h3":5.77,"h3r":1.34,"h5":7.95,"h5r":3.32},{"m":"1986-06","y":7.8,"h1":3.26,"h1r":-0.38,"h3":7.36,"h3r":2.97,"h5":7.78,"h5r":3.21},{"m":"1986-07","y":7.3,"h1":-0.48,"h1r":-4.24,"h3":6.77,"h3r":2.33,"h5":7.07,"h5r":2.5},{"m":"1986-08","y":7.17,"h1":-3.27,"h1r":-7.24,"h3":6.26,"h3r":1.84,"h5":7.43,"h5r":2.82},{"m":"1986-09","y":7.45,"h1":-5.35,"h1r":-9.3,"h3":6.79,"h3r":2.39,"h5":8.22,"h5r":3.58},{"m":"1986-10","y":7.43,"h1":-5.93,"h1r":-10.01,"h3":7.19,"h3r":2.65,"h5":8.37,"h5r":3.72},{"m":"1986-11","y":7.25,"h1":-2.97,"h1r":-7.17,"h3":7.1,"h3r":2.51,"h5":8.27,"h5r":3.57},{"m":"1986-12","y":7.11,"h1":-4.59,"h1r":-8.64,"h3":6.84,"h3r":2.24,"h5":8.56,"h5r":3.85},{"m":"1987-01","y":7.08,"h1":-2.65,"h1r":-6.44,"h3":5.9,"h3r":1.21,"h5":8.6,"h5r":4.0},{"m":"1987-02","y":7.25,"h1":1.65,"h1r":-2.2,"h3":5.74,"h3r":1.02,"h5":8.39,"h5r":3.79},{"m":"1987-03","y":7.25,"h1":0.66,"h1r":-3.15,"h3":5.5,"h3r":0.76,"h5":8.09,"h5r":3.5},{"m":"1987-04","y":8.02,"h1":3.82,"h1r":-0.08,"h3":6.96,"h3r":2.27,"h5":9.34,"h5r":4.77},{"m":"1987-05","y":8.61,"h1":5.49,"h1r":1.54,"h3":8.46,"h3r":3.75,"h5":10.33,"h5r":5.77},{"m":"1987-06","y":8.4,"h1":5.23,"h1r":1.21,"h3":8.63,"h3r":3.85,"h5":10.2,"h5r":5.64},{"m":"1987-07","y":8.45,"h1":4.67,"h1r":0.52,"h3":8.77,"h3r":3.95,"h5":10.9,"h5r":6.33},{"m":"1987-08","y":8.76,"h1":5.51,"h1r":1.43,"h3":8.85,"h3r":3.88,"h5":11.72,"h5r":7.16},{"m":"1987-09","y":9.42,"h1":12.13,"h1r":7.63,"h3":10.07,"h3r":4.94,"h5":12.91,"h5r":8.36},{"m":"1987-10","y":9.52,"h1":14.11,"h1r":9.46,"h3":10.69,"h3r":5.41,"h5":12.73,"h5r":8.16},{"m":"1987-11","y":8.86,"h1":8.25,"h1r":3.85,"h3":9.92,"h3r":4.63,"h5":11.29,"h5r":6.77},{"m":"1987-12","y":8.99,"h1":8.13,"h1r":3.55,"h3":10.97,"h3r":5.63,"h5":11.6,"h5r":7.08},{"m":"1988-01","y":8.67,"h1":6.07,"h1r":1.34,"h3":10.16,"h3r":4.74,"h5":11.37,"h5r":6.81},{"m":"1988-02","y":8.21,"h1":2.43,"h1r":-2.29,"h3":9.63,"h3r":4.27,"h5":11.2,"h5r":6.63},{"m":"1988-03","y":8.37,"h1":2.36,"h1r":-2.5,"h3":9.37,"h3r":4.12,"h5":11.86,"h5r":7.28},{"m":"1988-04","y":8.72,"h1":6.03,"h1r":0.86,"h3":10.37,"h3r":5.21,"h5":12.35,"h5r":7.8},{"m":"1988-05","y":9.09,"h1":10.88,"h1r":5.24,"h3":11.16,"h3r":5.98,"h5":12.72,"h5r":8.2},{"m":"1988-06","y":8.92,"h1":13.88,"h1r":8.28,"h3":10.21,"h3r":5.12,"h5":12.56,"h5r":8.1},{"m":"1988-07","y":9.06,"h1":16.85,"h1r":11.31,"h3":10.55,"h3r":5.54,"h5":12.96,"h5r":8.58},{"m":"1988-08","y":9.26,"h1":17.55,"h1r":12.26,"h3":11.91,"h3r":6.89,"h5":13.4,"h5r":9.04},{"m":"1988-09","y":8.98,"h1":14.75,"h1r":9.97,"h3":11.84,"h3r":6.9,"h5":13.48,"h5r":9.21},{"m":"1988-10","y":8.8,"h1":14.72,"h1r":9.79,"h3":11.67,"h3r":6.8,"h5":13.2,"h5r":8.93},{"m":"1988-11","y":8.96,"h1":16.94,"h1r":11.74,"h3":12.3,"h3r":7.33,"h5":12.71,"h5r":8.45},{"m":"1988-12","y":9.11,"h1":18.21,"h1r":12.96,"h3":13.48,"h3r":8.49,"h5":12.78,"h5r":8.56},{"m":"1989-01","y":9.09,"h1":15.03,"h1r":9.34,"h3":13.53,"h3r":8.66,"h5":12.72,"h5r":8.56},{"m":"1989-02","y":9.17,"h1":13.57,"h1r":7.89,"h3":12.84,"h3r":8.02,"h5":12.41,"h5r":8.27},{"m":"1989-03","y":9.36,"h1":13.98,"h1r":8.31,"h3":12.72,"h3r":7.94,"h5":11.79,"h5r":7.72},{"m":"1989-04","y":9.18,"h1":11.16,"h1r":6.16,"h3":12.39,"h3r":7.8,"h5":10.7,"h5r":6.78},{"m":"1989-05","y":8.86,"h1":9.08,"h1r":4.53,"h3":11.81,"h3r":7.39,"h5":9.88,"h5r":6.1},{"m":"1989-06","y":8.28,"h1":6.97,"h1r":2.19,"h3":10.7,"h3r":6.29,"h5":9.15,"h5r":5.37},{"m":"1989-07","y":8.02,"h1":5.22,"h1r":0.38,"h3":11.11,"h3r":6.69,"h5":8.45,"h5r":4.69},{"m":"1989-08","y":8.11,"h1":3.97,"h1r":-1.56,"h3":11.96,"h3r":7.47,"h5":8.66,"h5r":4.84},{"m":"1989-09","y":8.19,"h1":3.64,"h1r":-2.38,"h3":12.57,"h3r":8.06,"h5":8.43,"h5r":4.63},{"m":"1989-10","y":8.01,"h1":3.59,"h1r":-2.54,"h3":11.61,"h3r":7.19,"h5":7.74,"h5r":4.05},{"m":"1989-11","y":7.87,"h1":4.91,"h1r":-1.28,"h3":10.48,"h3r":6.14,"h5":7.21,"h5r":3.56},{"m":"1989-12","y":7.84,"h1":6.92,"h1r":0.76,"h3":10.64,"h3r":6.37,"h5":7.39,"h5r":3.77},{"m":"1990-01","y":8.21,"h1":9.56,"h1r":3.7,"h3":11.98,"h3r":7.85,"h5":7.97,"h5r":4.46},{"m":"1990-02","y":8.47,"h1":13.27,"h1r":7.55,"h3":13.5,"h3r":9.35,"h5":8.79,"h5r":5.27},{"m":"1990-03","y":8.59,"h1":12.12,"h1r":6.89,"h3":14.5,"h3r":10.4,"h5":9.35,"h5r":5.86},{"m":"1990-04","y":8.79,"h1":14.09,"h1r":8.77,"h3":14.95,"h3r":10.78,"h5":9.83,"h5r":6.28},{"m":"1990-05","y":8.76,"h1":13.57,"h1r":8.21,"h3":14.59,"h3r":10.47,"h5":10.42,"h5r":6.86},{"m":"1990-06","y":8.48,"h1":9.9,"h1r":4.97,"h3":14.04,"h3r":10.09,"h5":10.71,"h5r":7.21},{"m":"1990-07","y":8.47,"h1":9.88,"h1r":5.2,"h3":14.36,"h3r":10.54,"h5":10.48,"h5r":7.07},{"m":"1990-08","y":8.75,"h1":14.69,"h1r":10.5,"h3":15.35,"h3r":11.73,"h5":10.51,"h5r":7.24},{"m":"1990-09","y":8.89,"h1":17.63,"h1r":13.78,"h3":16.53,"h3r":13.11,"h5":11.13,"h5r":7.98},{"m":"1990-10","y":8.72,"h1":17.19,"h1r":13.86,"h3":16.08,"h3r":12.75,"h5":11.1,"h5r":8.01},{"m":"1990-11","y":8.39,"h1":15.45,"h1r":12.1,"h3":14.02,"h3r":10.8,"h5":10.75,"h5r":7.74},{"m":"1990-12","y":8.08,"h1":15.63,"h1r":12.19,"h3":13.02,"h3r":9.83,"h5":10.61,"h5r":7.62},{"m":"1991-01","y":8.09,"h1":16.1,"h1r":13.16,"h3":13.03,"h3r":9.96,"h5":10.69,"h5r":7.69},{"m":"1991-02","y":7.85,"h1":11.7,"h1r":8.64,"h3":11.75,"h3r":8.64,"h5":10.02,"h5r":7.01},{"m":"1991-03","y":8.11,"h1":12.07,"h1r":8.61,"h3":10.95,"h3r":7.8,"h5":9.63,"h5r":6.54},{"m":"1991-04","y":8.04,"h1":11.96,"h1r":8.5,"h3":9.44,"h3r":6.34,"h5":9.11,"h5r":5.99},{"m":"1991-05","y":8.07,"h1":12.83,"h1r":9.52,"h3":8.95,"h3r":5.94,"h5":8.77,"h5r":5.68},{"m":"1991-06","y":8.28,"h1":15.39,"h1r":11.93,"h3":9.64,"h3r":6.59,"h5":8.79,"h5r":5.75},{"m":"1991-07","y":8.27,"h1":18.64,"h1r":15.01,"h3":9.07,"h3r":5.99,"h5":8.81,"h5r":5.76},{"m":"1991-08","y":7.9,"h1":17.69,"h1r":14.1,"h3":8.3,"h3r":5.21,"h5":8.61,"h5r":5.58},{"m":"1991-09","y":7.65,"h1":17.01,"h1r":13.62,"h3":7.12,"h3r":4.13,"h5":7.92,"h5r":4.95},{"m":"1991-10","y":7.53,"h1":14.53,"h1r":10.98,"h3":6.14,"h3r":3.2,"h5":8.19,"h5r":5.17},{"m":"1991-11","y":7.42,"h1":11.34,"h1r":8.04,"h3":5.36,"h3r":2.49,"h5":8.53,"h5r":5.52},{"m":"1991-12","y":7.09,"h1":9.55,"h1r":6.46,"h3":4.93,"h3r":2.1,"h5":7.85,"h5r":4.88},{"m":"1992-01","y":7.03,"h1":10.39,"h1r":6.9,"h3":4.87,"h3r":1.95,"h5":7.31,"h5r":4.32},{"m":"1992-02","y":7.34,"h1":15.56,"h1r":11.92,"h3":6.4,"h3r":3.43,"h5":8.02,"h5r":5.01},{"m":"1992-03","y":7.54,"h1":19.47,"h1r":15.9,"h3":7.56,"h3r":4.61,"h5":7.88,"h5r":4.93},{"m":"1992-04","y":7.48,"h1":18.92,"h1r":15.2,"h3":7.75,"h3r":4.74,"h5":7.47,"h5r":4.54},{"m":"1992-05","y":7.39,"h1":17.44,"h1r":13.77,"h3":8.61,"h3r":5.55,"h5":7.6,"h5r":4.71},{"m":"1992-06","y":7.26,"h1":16.94,"h1r":13.54,"h3":9.46,"h3r":6.43,"h5":7.74,"h5r":4.89},{"m":"1992-07","y":6.84,"h1":14.71,"h1r":11.62,"h3":8.08,"h3r":5.16,"h5":7.51,"h5r":4.69},{"m":"1992-08","y":6.59,"h1":13.7,"h1r":10.63,"h3":6.88,"h3r":4.01,"h5":7.0,"h5r":4.21},{"m":"1992-09","y":6.42,"h1":14.96,"h1r":11.95,"h3":7.19,"h3r":4.34,"h5":6.87,"h5r":4.09},{"m":"1992-10","y":6.59,"h1":16.54,"h1r":13.42,"h3":8.04,"h3r":5.18,"h5":7.41,"h5r":4.64},{"m":"1992-11","y":6.87,"h1":15.32,"h1r":12.31,"h3":9.04,"h3r":6.22,"h5":8.07,"h5r":5.32},{"m":"1992-12","y":6.77,"h1":13.97,"h1r":10.93,"h3":9.35,"h3r":6.52,"h5":8.01,"h5r":5.28},{"m":"1993-01","y":6.6,"h1":12.68,"h1r":9.91,"h3":9.04,"h3r":6.19,"h5":8.17,"h5r":5.49},{"m":"1993-02","y":6.26,"h1":8.11,"h1r":5.45,"h3":7.7,"h3r":4.89,"h5":7.57,"h5r":4.95},{"m":"1993-03","y":5.98,"h1":2.01,"h1r":-0.48,"h3":5.75,"h3r":2.93,"h5":6.99,"h5r":4.42},{"m":"1993-04","y":5.97,"h1":-1.54,"h1r":-3.81,"h3":5.12,"h3r":2.29,"h5":6.99,"h5r":4.43},{"m":"1993-05","y":6.04,"h1":-2.4,"h1r":-4.59,"h3":4.74,"h3r":1.9,"h5":7.08,"h5r":4.51},{"m":"1993-06","y":5.96,"h1":-2.34,"h1r":-4.72,"h3":4.13,"h3r":1.33,"h5":7.19,"h5r":4.62},{"m":"1993-07","y":5.81,"h1":-4.67,"h1r":-7.24,"h3":3.87,"h3r":1.02,"h5":7.0,"h5r":4.42},{"m":"1993-08","y":5.68,"h1":-5.08,"h1r":-7.75,"h3":4.13,"h3r":1.3,"h5":6.99,"h5r":4.43},{"m":"1993-09","y":5.36,"h1":-8.61,"h1r":-11.24,"h3":2.87,"h3r":0.03,"h5":7.33,"h5r":4.79},{"m":"1993-10","y":5.33,"h1":-10.4,"h1r":-12.68,"h3":3.56,"h3r":0.74,"h5":7.74,"h5r":5.22},{"m":"1993-11","y":5.72,"h1":-8.91,"h1r":-11.28,"h3":5.45,"h3r":2.53,"h5":7.86,"h5r":5.35},{"m":"1993-12","y":5.77,"h1":-7.47,"h1r":-9.88,"h3":5.34,"h3r":2.43,"h5":8.22,"h5r":5.72},{"m":"1994-01","y":5.75,"h1":-7.27,"h1r":-9.8,"h3":4.59,"h3r":1.69,"h5":8.05,"h5r":5.56},{"m":"1994-02","y":5.97,"h1":-3.58,"h1r":-6.26,"h3":5.59,"h3r":2.67,"h5":7.92,"h5r":5.47},{"m":"1994-03","y":6.48,"h1":2.1,"h1r":-0.73,"h3":6.24,"h3r":3.33,"h5":8.33,"h5r":5.88},{"m":"1994-04","y":6.97,"h1":6.85,"h1r":3.68,"h3":6.99,"h3r":4.06,"h5":9.15,"h5r":6.56},{"m":"1994-05","y":7.18,"h1":11.78,"h1r":8.32,"h3":7.97,"h3r":5.06,"h5":8.84,"h5r":6.27},{"m":"1994-06","y":7.1,"h1":14.83,"h1r":11.45,"h3":8.32,"h3r":5.47,"h5":8.11,"h5r":5.63},{"m":"1994-07","y":7.3,"h1":15.43,"h1r":12.33,"h3":9.52,"h3r":6.69,"h5":8.56,"h5r":6.07},{"m":"1994-08","y":7.24,"h1":13.12,"h1r":10.24,"h3":9.12,"h3r":6.38,"h5":8.21,"h5r":5.75},{"m":"1994-09","y":7.46,"h1":17.22,"h1r":14.31,"h3":9.89,"h3r":7.14,"h5":8.55,"h5r":6.04},{"m":"1994-10","y":7.74,"h1":20.77,"h1r":17.47,"h3":11.04,"h3r":8.2,"h5":8.63,"h5r":6.1},{"m":"1994-11","y":7.96,"h1":23.41,"h1r":20.28,"h3":11.95,"h3r":9.16,"h5":9.06,"h5r":6.53},{"m":"1994-12","y":7.81,"h1":23.97,"h1r":20.91,"h3":11.71,"h3r":8.96,"h5":8.4,"h5r":5.89},{"m":"1995-01","y":7.78,"h1":24.07,"h1r":20.77,"h3":12.32,"h3r":9.64,"h5":7.74,"h5r":5.27},{"m":"1995-02","y":7.47,"h1":19.83,"h1r":16.74,"h3":11.38,"h3r":8.8,"h5":7.48,"h5r":4.97},{"m":"1995-03","y":7.2,"h1":13.53,"h1r":10.4,"h3":10.42,"h3r":7.91,"h5":7.47,"h5r":4.86},{"m":"1995-04","y":7.06,"h1":10.41,"h1r":7.3,"h3":10.04,"h3r":7.59,"h5":7.66,"h5r":5.11},{"m":"1995-05","y":6.63,"h1":5.32,"h1r":2.36,"h3":8.87,"h3r":6.45,"h5":6.29,"h5r":3.78},{"m":"1995-06","y":6.17,"h1":0.69,"h1r":-2.01,"h3":8.05,"h3r":5.68,"h5":6.11,"h5r":3.54},{"m":"1995-07","y":6.28,"h1":1.85,"h1r":-1.07,"h3":8.43,"h3r":6.01,"h5":6.36,"h5r":3.73},{"m":"1995-08","y":6.49,"h1":5.16,"h1r":2.21,"h3":9.29,"h3r":6.89,"h5":7.02,"h5r":4.44},{"m":"1995-09","y":6.2,"h1":1.61,"h1r":-1.36,"h3":9.97,"h3r":7.58,"h5":6.61,"h5r":3.97},{"m":"1995-10","y":6.04,"h1":2.64,"h1r":-0.34,"h3":10.3,"h3r":7.94,"h5":6.45,"h5r":3.84},{"m":"1995-11","y":5.93,"h1":4.3,"h1r":1.02,"h3":9.09,"h3r":6.74,"h5":6.31,"h5r":3.68},{"m":"1995-12","y":5.71,"h1":1.9,"h1r":-1.38,"h3":8.98,"h3r":6.62,"h5":6.72,"h5r":4.08},{"m":"1996-01","y":5.65,"h1":-0.54,"h1r":-3.48,"h3":8.59,"h3r":6.36,"h5":6.75,"h5r":4.1},{"m":"1996-02","y":5.81,"h1":1.89,"h1r":-1.11,"h3":8.2,"h3r":6.06,"h5":7.09,"h5r":4.42},{"m":"1996-03","y":6.27,"h1":3.44,"h1r":0.66,"h3":8.77,"h3r":6.68,"h5":8.16,"h5r":5.52},{"m":"1996-04","y":6.51,"h1":3.8,"h1r":1.27,"h3":9.51,"h3r":7.29,"h5":8.09,"h5r":5.45},{"m":"1996-05","y":6.74,"h1":6.91,"h1r":4.57,"h3":9.07,"h3r":6.93,"h5":8.01,"h5r":5.32},{"m":"1996-06","y":6.91,"h1":9.92,"h1r":7.45,"h3":8.49,"h3r":6.39,"h5":8.43,"h5r":5.7},{"m":"1996-07","y":6.87,"h1":11.73,"h1r":9.29,"h3":8.66,"h3r":6.51,"h5":8.41,"h5r":5.78},{"m":"1996-08","y":6.64,"h1":9.22,"h1r":6.85,"h3":7.64,"h3r":5.49,"h5":8.47,"h5r":5.88},{"m":"1996-09","y":6.83,"h1":11.41,"h1r":9.06,"h3":8.16,"h3r":5.94,"h5":9.14,"h5r":6.51},{"m":"1996-10","y":6.53,"h1":10.45,"h1r":8.19,"h3":6.87,"h3r":4.73,"h5":8.92,"h5r":6.43},{"m":"1996-11","y":6.2,"h1":9.01,"h1r":7.05,"h3":6.22,"h3r":4.14,"h5":8.23,"h5r":5.83},{"m":"1996-12","y":6.3,"h1":10.35,"h1r":8.5,"h3":5.82,"h3r":3.75,"h5":7.62,"h5r":5.31},{"m":"1997-01","y":6.58,"h1":14.85,"h1r":13.07,"h3":5.57,"h3r":3.51,"h5":8.11,"h5r":5.82},{"m":"1997-02","y":6.42,"h1":13.18,"h1r":11.58,"h3":5.52,"h3r":3.36,"h5":8.06,"h5r":5.75},{"m":"1997-03","y":6.69,"h1":14.63,"h1r":13.08,"h3":6.87,"h3r":4.49,"h5":7.83,"h5r":5.46},{"m":"1997-04","y":6.89,"h1":16.27,"h1r":14.62,"h3":8.07,"h3r":5.69,"h5":8.23,"h5r":5.76},{"m":"1997-05","y":6.71,"h1":14.59,"h1r":12.69,"h3":6.41,"h3r":4.0,"h5":8.01,"h5r":5.53},{"m":"1997-06","y":6.49,"h1":13.99,"h1r":12.1,"h3":6.72,"h3r":4.16,"h5":8.02,"h5r":5.56},{"m":"1997-07","y":6.22,"h1":12.04,"h1r":10.18,"h3":6.15,"h3r":3.57,"h5":8.04,"h5r":5.58},{"m":"1997-08","y":6.3,"h1":13.65,"h1r":11.84,"h3":6.93,"h3r":4.39,"h5":8.81,"h5r":6.3},{"m":"1997-09","y":6.21,"h1":17.47,"h1r":15.75,"h3":6.76,"h3r":4.13,"h5":9.31,"h5r":6.81},{"m":"1997-10","y":6.03,"h1":18.36,"h1r":16.63,"h3":6.44,"h3r":3.85,"h5":8.86,"h5r":6.38},{"m":"1997-11","y":5.88,"h1":14.19,"h1r":12.45,"h3":6.09,"h3r":3.47,"h5":8.39,"h5r":5.91},{"m":"1997-12","y":5.81,"h1":15.11,"h1r":13.28,"h3":7.18,"h3r":4.51,"h5":8.28,"h5r":5.82},{"m":"1998-01","y":5.54,"h1":12.1,"h1r":10.25,"h3":6.67,"h3r":3.85,"h5":7.78,"h5r":5.28},{"m":"1998-02","y":5.57,"h1":9.85,"h1r":8.11,"h3":6.9,"h3r":4.0,"h5":8.06,"h5r":5.44},{"m":"1998-03","y":5.65,"h1":8.52,"h1r":6.68,"h3":7.68,"h3r":4.75,"h5":8.32,"h5r":5.6},{"m":"1998-04","y":5.64,"h1":8.82,"h1r":6.39,"h3":6.94,"h3r":3.95,"h5":8.01,"h5r":5.38},{"m":"1998-05","y":5.65,"h1":5.91,"h1r":3.74,"h3":6.27,"h3r":3.21,"h5":8.68,"h5r":6.11},{"m":"1998-06","y":5.5,"h1":1.93,"h1r":-0.03,"h3":6.16,"h3r":3.09,"h5":8.83,"h5r":6.26},{"m":"1998-07","y":5.46,"h1":2.49,"h1r":0.34,"h3":6.15,"h3r":3.22,"h5":7.56,"h5r":5.02},{"m":"1998-08","y":5.34,"h1":0.47,"h1r":-1.76,"h3":6.56,"h3r":3.66,"h5":6.53,"h5r":3.96},{"m":"1998-09","y":4.81,"h1":-3.32,"h1r":-5.8,"h3":5.77,"h3r":2.78,"h5":5.96,"h5r":3.36},{"m":"1998-10","y":4.53,"h1":-6.64,"h1r":-8.98,"h3":5.44,"h3r":2.66,"h5":5.45,"h5r":2.94},{"m":"1998-11","y":4.83,"h1":-3.73,"h1r":-6.19,"h3":6.06,"h3r":3.31,"h5":5.93,"h5r":3.46},{"m":"1998-12","y":4.65,"h1":-6.7,"h1r":-9.14,"h3":4.35,"h3r":1.77,"h5":5.67,"h5r":3.22},{"m":"1999-01","y":4.72,"h1":-8.61,"h1r":-11.05,"h3":4.69,"h3r":2.1,"h5":5.99,"h5r":3.48},{"m":"1999-02","y":5.0,"h1":-5.51,"h1r":-8.46,"h3":5.82,"h3r":3.11,"h5":6.56,"h5r":3.95},{"m":"1999-03","y":5.23,"h1":-1.88,"h1r":-5.43,"h3":5.43,"h3r":2.65,"h5":7.36,"h5r":4.66},{"m":"1999-04","y":5.18,"h1":-0.23,"h1r":-3.2,"h3":5.49,"h3r":2.76,"h5":6.35,"h5r":3.76},{"m":"1999-05","y":5.54,"h1":-0.72,"h1r":-3.78,"h3":6.59,"h3r":3.83,"h5":6.29,"h5r":3.58},{"m":"1999-06","y":5.9,"h1":4.61,"h1r":0.85,"h3":8.18,"h3r":5.36,"h5":6.83,"h5r":4.05},{"m":"1999-07","y":5.79,"h1":4.16,"h1r":0.49,"h3":8.64,"h3r":5.88,"h5":7.03,"h5r":4.33},{"m":"1999-08","y":5.94,"h1":7.07,"h1r":3.54,"h3":10.13,"h3r":7.3,"h5":7.62,"h5r":4.94},{"m":"1999-09","y":5.92,"h1":7.14,"h1r":3.56,"h3":11.18,"h3r":8.43,"h5":7.81,"h5r":5.19},{"m":"1999-10","y":6.11,"h1":9.13,"h1r":5.49,"h3":11.43,"h3r":8.68,"h5":8.14,"h5r":5.43},{"m":"1999-11","y":6.03,"h1":8.62,"h1r":5.0,"h3":10.81,"h3r":8.1,"h5":7.82,"h5r":5.12},{"m":"1999-12","y":6.28,"h1":14.65,"h1r":10.89,"h3":11.49,"h3r":8.84,"h5":8.11,"h5r":5.49},{"m":"2000-01","y":6.66,"h1":18.47,"h1r":14.2,"h3":12.39,"h3r":9.67,"h5":8.69,"h5r":6.07},{"m":"2000-02","y":6.52,"h1":17.68,"h1r":13.67,"h3":12.39,"h3r":9.6,"h5":8.52,"h5r":5.9},{"m":"2000-03","y":6.26,"h1":17.25,"h1r":13.92,"h3":11.89,"h3r":9.19,"h5":7.5,"h5r":4.92},{"m":"2000-04","y":5.99,"h1":12.63,"h1r":9.07,"h3":10.63,"h3r":8.06,"h5":7.32,"h5r":4.62},{"m":"2000-05","y":6.44,"h1":14.13,"h1r":10.15,"h3":12.98,"h3r":10.46,"h5":8.34,"h5r":5.66},{"m":"2000-06","y":6.1,"h1":12.19,"h1r":8.67,"h3":12.71,"h3r":10.35,"h5":8.02,"h5r":5.44},{"m":"2000-07","y":6.05,"h1":12.05,"h1r":9.08,"h3":10.48,"h3r":8.21,"h5":7.59,"h5r":4.97},{"m":"2000-08","y":5.83,"h1":12.48,"h1r":9.5,"h3":8.44,"h3r":6.08,"h5":7.07,"h5r":4.36},{"m":"2000-09","y":5.8,"h1":14.25,"h1r":11.3,"h3":8.84,"h3r":6.54,"h5":7.1,"h5r":4.24},{"m":"2000-10","y":5.74,"h1":15.08,"h1r":12.68,"h3":8.57,"h3r":6.38,"h5":6.53,"h5r":3.69},{"m":"2000-11","y":5.72,"h1":14.08,"h1r":11.95,"h3":8.45,"h3r":6.37,"h5":6.34,"h5r":3.68},{"m":"2000-12","y":5.24,"h1":6.24,"h1r":4.61,"h3":7.2,"h3r":5.17,"h5":5.68,"h5r":3.11},{"m":"2001-01","y":5.16,"h1":5.98,"h1r":4.79,"h3":7.3,"h3r":5.31,"h5":5.62,"h5r":3.02},{"m":"2001-02","y":5.1,"h1":6.55,"h1r":5.35,"h3":7.31,"h3r":5.27,"h5":5.26,"h5r":2.71},{"m":"2001-03","y":4.89,"h1":1.87,"h1r":0.39,"h3":7.42,"h3r":5.24,"h5":4.66,"h5r":2.06},{"m":"2001-04","y":5.14,"h1":4.45,"h1r":2.77,"h3":6.57,"h3r":4.43,"h5":4.62,"h5r":1.93},{"m":"2001-05","y":5.39,"h1":6.88,"h1r":5.63,"h3":6.19,"h3r":4.01,"h5":4.83,"h5r":2.12},{"m":"2001-06","y":5.28,"h1":7.86,"h1r":6.72,"h3":5.84,"h3r":3.62,"h5":4.65,"h5r":1.94},{"m":"2001-07","y":5.24,"h1":9.86,"h1r":8.28,"h3":6.36,"h3r":4.08,"h5":4.61,"h5r":1.79},{"m":"2001-08","y":4.97,"h1":10.92,"h1r":8.95,"h3":6.22,"h3r":3.93,"h5":4.52,"h5r":1.66},{"m":"2001-09","y":4.73,"h1":12.27,"h1r":10.59,"h3":5.97,"h3r":3.77,"h5":4.39,"h5r":1.72},{"m":"2001-10","y":4.57,"h1":10.16,"h1r":7.98,"h3":5.6,"h3r":3.1,"h5":4.11,"h5r":1.49},{"m":"2001-11","y":4.65,"h1":9.82,"h1r":7.46,"h3":5.55,"h3r":2.98,"h5":4.46,"h5r":1.83},{"m":"2001-12","y":5.09,"h1":13.79,"h1r":11.15,"h3":6.64,"h3r":4.03,"h5":5.24,"h5r":2.48},{"m":"2002-01","y":5.04,"h1":13.07,"h1r":10.21,"h3":6.51,"h3r":3.91,"h5":4.82,"h5r":2.06},{"m":"2002-02","y":4.91,"h1":13.22,"h1r":9.94,"h3":6.27,"h3r":3.62,"h5":4.67,"h5r":1.88},{"m":"2002-03","y":5.28,"h1":17.26,"h1r":13.82,"h3":6.32,"h3r":3.59,"h5":5.53,"h5r":2.65},{"m":"2002-04","y":5.21,"h1":15.08,"h1r":12.58,"h3":6.56,"h3r":3.79,"h5":5.19,"h5r":2.3},{"m":"2002-05","y":5.16,"h1":18.22,"h1r":15.83,"h3":6.97,"h3r":4.22,"h5":5.0,"h5r":1.99},{"m":"2002-06","y":4.93,"h1":18.33,"h1r":15.88,"h3":6.71,"h3r":3.97,"h5":4.06,"h5r":1.05},{"m":"2002-07","y":4.65,"h1":9.54,"h1r":7.28,"h3":5.4,"h3r":2.58,"h5":3.77,"h5r":0.79},{"m":"2002-08","y":4.26,"h1":2.22,"h1r":0.06,"h3":4.09,"h3r":1.24,"h5":3.67,"h5r":0.8},{"m":"2002-09","y":3.87,"h1":0.51,"h1r":-1.77,"h3":3.18,"h3r":0.0,"h5":3.27,"h5r":0.39},{"m":"2002-10","y":3.94,"h1":0.96,"h1r":-1.06,"h3":2.67,"h3r":-0.5,"h5":3.39,"h5r":0.49},{"m":"2002-11","y":4.05,"h1":1.81,"h1r":0.05,"h3":2.77,"h3r":-0.13,"h5":4.2,"h5r":1.17},{"m":"2002-12","y":4.03,"h1":1.91,"h1r":0.03,"h3":2.92,"h3r":0.07,"h5":4.26,"h5r":1.19},{"m":"2003-01","y":4.05,"h1":3.08,"h1r":1.13,"h3":3.12,"h3r":0.16,"h5":4.9,"h5r":1.8},{"m":"2003-02","y":3.9,"h1":2.42,"h1r":0.72,"h3":2.31,"h3r":-0.44,"h5":4.64,"h5r":1.65},{"m":"2003-03","y":3.81,"h1":3.76,"h1r":1.99,"h3":1.68,"h3r":-1.04,"h5":4.88,"h5r":1.83},{"m":"2003-04","y":3.96,"h1":0.69,"h1r":-1.55,"h3":1.41,"h3r":-1.65,"h5":4.84,"h5r":1.62},{"m":"2003-05","y":3.57,"h1":-5.24,"h1r":-8.05,"h3":0.06,"h3r":-3.17,"h5":3.83,"h5r":0.44},{"m":"2003-06","y":3.33,"h1":-7.09,"h1r":-10.03,"h3":-0.56,"h3r":-3.8,"h5":3.05,"h5r":-0.49},{"m":"2003-07","y":3.98,"h1":-0.03,"h1r":-2.93,"h3":1.35,"h3r":-2.01,"h5":4.34,"h5r":0.67},{"m":"2003-08","y":4.45,"h1":5.71,"h1r":2.97,"h3":3.23,"h3r":-0.14,"h5":5.34,"h5r":1.79},{"m":"2003-09","y":4.27,"h1":5.45,"h1r":2.84,"h3":3.18,"h3r":0.08,"h5":5.37,"h5r":1.92},{"m":"2003-10","y":4.29,"h1":5.86,"h1r":2.59,"h3":3.22,"h3r":0.27,"h5":5.19,"h5r":1.92},{"m":"2003-11","y":4.3,"h1":5.17,"h1r":1.59,"h3":3.61,"h3r":0.61,"h5":5.68,"h5r":2.74},{"m":"2003-12","y":4.27,"h1":4.57,"h1r":1.27,"h3":3.64,"h3r":0.55,"h5":7.59,"h5r":4.79},{"m":"2004-01","y":4.15,"h1":3.65,"h1r":0.66,"h3":2.78,"h3r":-0.22,"h5":7.16,"h5r":4.39},{"m":"2004-02","y":4.08,"h1":3.49,"h1r":0.47,"h3":2.71,"h3r":-0.29,"h5":6.36,"h5r":3.62},{"m":"2004-03","y":3.83,"h1":-1.22,"h1r":-4.23,"h3":2.47,"h3r":-0.61,"h5":6.01,"h5r":3.35},{"m":"2004-04","y":4.35,"h1":4.42,"h1r":0.88,"h3":3.59,"h3r":0.37,"h5":6.69,"h5r":4.03},{"m":"2004-05","y":4.72,"h1":9.26,"h1r":6.28,"h3":4.45,"h3r":1.2,"h5":6.63,"h5r":4.04},{"m":"2004-06","y":4.73,"h1":10.53,"h1r":7.8,"h3":3.53,"h3r":0.35,"h5":5.86,"h5r":3.18},{"m":"2004-07","y":4.5,"h1":6.93,"h1r":3.64,"h3":3.19,"h3r":-0.03,"h5":5.74,"h5r":3.06},{"m":"2004-08","y":4.28,"h1":4.38,"h1r":0.71,"h3":3.48,"h3r":0.33,"h5":5.31,"h5r":2.6},{"m":"2004-09","y":4.13,"h1":3.63,"h1r":-1.01,"h3":3.49,"h3r":0.31,"h5":5.37,"h5r":2.7},{"m":"2004-10","y":4.1,"h1":1.26,"h1r":-2.96,"h3":3.39,"h3r":0.32,"h5":5.33,"h5r":2.74},{"m":"2004-11","y":4.19,"h1":1.38,"h1r":-2.01,"h3":4.69,"h3r":1.41,"h5":5.45,"h5r":2.86},{"m":"2004-12","y":4.23,"h1":2.3,"h1r":-1.08,"h3":4.94,"h3r":1.55,"h5":5.17,"h5r":2.54},{"m":"2005-01","y":4.22,"h1":2.64,"h1r":-1.29,"h3":5.93,"h3r":2.41,"h5":4.9,"h5r":2.25},{"m":"2005-02","y":4.17,"h1":1.04,"h1r":-2.47,"h3":5.78,"h3r":2.36,"h5":4.88,"h5r":2.34},{"m":"2005-03","y":4.5,"h1":2.56,"h1r":-0.77,"h3":7.38,"h3r":3.87,"h5":5.35,"h5r":2.89},{"m":"2005-04","y":4.34,"h1":-0.82,"h1r":-4.22,"h3":6.4,"h3r":2.95,"h5":4.87,"h5r":2.51},{"m":"2005-05","y":4.14,"h1":-3.24,"h1r":-7.11,"h3":5.23,"h3r":1.5,"h5":5.26,"h5r":2.86},{"m":"2005-06","y":4.0,"h1":-4.24,"h1r":-8.21,"h3":4.21,"h3r":0.2,"h5":5.4,"h5r":3.03},{"m":"2005-07","y":4.18,"h1":-2.6,"h1r":-6.48,"h3":4.97,"h3r":0.91,"h5":6.03,"h5r":3.74},{"m":"2005-08","y":4.26,"h1":-0.31,"h1r":-3.97,"h3":5.53,"h3r":1.76,"h5":6.71,"h5r":4.48},{"m":"2005-09","y":4.2,"h1":0.51,"h1r":-1.52,"h3":5.93,"h3r":2.6,"h5":6.67,"h5r":4.68},{"m":"2005-10","y":4.46,"h1":2.58,"h1r":1.26,"h3":6.3,"h3r":3.38,"h5":7.29,"h5r":5.31},{"m":"2005-11","y":4.54,"h1":4.31,"h1r":2.29,"h3":7.32,"h3r":4.77,"h5":6.99,"h5r":4.83},{"m":"2005-12","y":4.47,"h1":4.07,"h1r":1.49,"h3":10.46,"h3r":8.05,"h5":5.87,"h5r":3.62},{"m":"2006-01","y":4.42,"h1":2.05,"h1r":-0.03,"h3":9.93,"h3r":7.65,"h5":5.59,"h5r":3.4},{"m":"2006-02","y":4.57,"h1":3.62,"h1r":1.18,"h3":9.19,"h3r":6.83,"h5":5.49,"h5r":3.24},{"m":"2006-03","y":4.72,"h1":6.18,"h1r":3.31,"h3":9.73,"h3r":7.46,"h5":6.02,"h5r":3.67},{"m":"2006-04","y":4.99,"h1":7.33,"h1r":4.63,"h3":10.1,"h3r":8.04,"h5":6.35,"h5r":4.04},{"m":"2006-05","y":5.11,"h1":7.79,"h1r":4.97,"h3":9.25,"h3r":7.29,"h5":7.04,"h5r":4.72},{"m":"2006-06","y":5.11,"h1":4.86,"h1r":2.12,"h3":7.9,"h3r":5.72,"h5":7.31,"h5r":5.05},{"m":"2006-07","y":5.09,"h1":5.51,"h1r":3.08,"h3":8.28,"h3r":6.25,"h5":7.24,"h5r":5.03},{"m":"2006-08","y":4.88,"h1":6.49,"h1r":4.44,"h3":7.56,"h3r":5.54,"h5":8.15,"h5r":5.89},{"m":"2006-09","y":4.72,"h1":6.41,"h1r":3.55,"h3":7.64,"h3r":5.43,"h5":8.44,"h5r":6.05},{"m":"2006-10","y":4.73,"h1":6.39,"h1r":2.75,"h3":7.66,"h3r":5.22,"h5":8.08,"h5r":5.62},{"m":"2006-11","y":4.6,"h1":8.51,"h1r":4.03,"h3":7.23,"h3r":4.72,"h5":8.09,"h5r":5.61},{"m":"2006-12","y":4.56,"h1":8.56,"h1r":4.31,"h3":6.52,"h3r":4.14,"h5":8.03,"h5r":5.64},{"m":"2007-01","y":4.76,"h1":13.49,"h1r":8.84,"h3":6.64,"h3r":4.24,"h5":8.34,"h5r":5.92},{"m":"2007-02","y":4.72,"h1":13.05,"h1r":8.67,"h3":6.61,"h3r":4.4,"h5":8.23,"h5r":5.83},{"m":"2007-03","y":4.56,"h1":13.68,"h1r":9.32,"h3":6.02,"h3r":3.99,"h5":7.52,"h5r":5.17},{"m":"2007-04","y":4.69,"h1":13.14,"h1r":8.86,"h3":6.01,"h3r":4.15,"h5":7.93,"h5r":5.64},{"m":"2007-05","y":4.75,"h1":11.73,"h1r":7.25,"h3":7.41,"h3r":5.7,"h5":8.47,"h5r":6.32},{"m":"2007-06","y":5.1,"h1":12.7,"h1r":7.31,"h3":9.01,"h3r":7.39,"h5":9.36,"h5r":7.27},{"m":"2007-07","y":5.0,"h1":12.56,"h1r":6.59,"h3":9.26,"h3r":7.61,"h5":9.31,"h5r":7.25},{"m":"2007-08","y":4.67,"h1":10.71,"h1r":5.07,"h3":9.23,"h3r":7.47,"h5":8.4,"h5r":6.19},{"m":"2007-09","y":4.52,"h1":11.14,"h1r":5.91,"h3":8.9,"h3r":7.22,"h5":8.01,"h5r":5.78},{"m":"2007-10","y":4.53,"h1":10.06,"h1r":6.18,"h3":9.22,"h3r":7.57,"h5":7.92,"h5r":5.74},{"m":"2007-11","y":4.15,"h1":9.22,"h1r":8.06,"h3":7.39,"h3r":5.96,"h5":7.42,"h5r":5.48},{"m":"2007-12","y":4.1,"h1":19.28,"h1r":19.17,"h3":5.59,"h3r":4.1,"h5":7.15,"h5r":5.26},{"m":"2008-01","y":3.74,"h1":14.69,"h1r":14.66,"h3":4.26,"h3r":2.79,"h5":6.12,"h5r":4.29},{"m":"2008-02","y":3.74,"h1":11.14,"h1r":10.88,"h3":3.7,"h3r":2.18,"h5":5.96,"h5r":4.02},{"m":"2008-03","y":3.51,"h1":9.45,"h1r":9.87,"h3":3.53,"h3r":1.97,"h5":5.56,"h5r":3.76},{"m":"2008-04","y":3.68,"h1":9.9,"h1r":10.72,"h3":3.87,"h3r":2.29,"h5":6.21,"h5r":4.54},{"m":"2008-05","y":3.88,"h1":8.28,"h1r":9.69,"h3":5.28,"h3r":3.81,"h5":6.2,"h5r":4.67},{"m":"2008-06","y":4.1,"h1":6.29,"h1r":7.83,"h3":6.39,"h3r":5.3,"h5":5.85,"h5r":4.48},{"m":"2008-07","y":4.01,"h1":6.89,"h1r":9.18,"h3":6.1,"h3r":5.16,"h5":5.14,"h5r":3.89},{"m":"2008-08","y":3.89,"h1":5.55,"h1r":7.14,"h3":7.86,"h3r":6.66,"h5":4.62,"h5r":3.26},{"m":"2008-09","y":3.69,"h1":5.47,"h1r":6.84,"h3":8.24,"h3r":6.94,"h5":4.14,"h5r":2.73},{"m":"2008-10","y":3.81,"h1":6.57,"h1r":6.77,"h3":8.0,"h3r":6.41,"h5":4.67,"h5r":3.1},{"m":"2008-11","y":3.53,"h1":4.04,"h1r":2.16,"h3":7.57,"h3r":5.34,"h5":3.99,"h5r":2.08},{"m":"2008-12","y":2.42,"h1":-6.67,"h1r":-9.14,"h3":4.35,"h3r":1.91,"h5":1.75,"h5r":-0.33},{"m":"2009-01","y":2.52,"h1":-6.84,"h1r":-9.22,"h3":4.68,"h3r":2.23,"h5":2.01,"h5r":-0.06},{"m":"2009-02","y":2.87,"h1":-3.55,"h1r":-5.57,"h3":5.73,"h3r":3.27,"h5":2.9,"h5r":0.84},{"m":"2009-03","y":2.82,"h1":-4.21,"h1r":-6.38,"h3":4.92,"h3r":2.31,"h5":2.79,"h5r":0.65},{"m":"2009-04","y":2.93,"h1":-4.18,"h1r":-6.28,"h3":5.61,"h3r":2.96,"h5":3.0,"h5r":0.84},{"m":"2009-05","y":3.29,"h1":2.42,"h1r":0.39,"h3":7.46,"h3r":4.91,"h5":3.9,"h5r":1.71},{"m":"2009-06","y":3.72,"h1":8.14,"h1r":7.01,"h3":9.3,"h3r":7.07,"h5":4.56,"h5r":2.5},{"m":"2009-07","y":3.56,"h1":8.41,"h1r":7.08,"h3":9.06,"h3r":6.83,"h5":4.38,"h5r":2.29},{"m":"2009-08","y":3.59,"h1":11.53,"h1r":10.26,"h3":8.59,"h3r":6.26,"h5":4.63,"h5r":2.62},{"m":"2009-09","y":3.4,"h1":10.19,"h1r":8.94,"h3":7.84,"h3r":5.38,"h5":4.08,"h5r":2.08},{"m":"2009-10","y":3.39,"h1":11.08,"h1r":9.79,"h3":7.66,"h3r":5.26,"h5":4.47,"h5r":2.53},{"m":"2009-11","y":3.4,"h1":8.99,"h1r":7.76,"h3":7.97,"h3r":5.75,"h5":4.41,"h5r":2.6},{"m":"2009-12","y":3.59,"h1":5.75,"h1r":4.19,"h3":8.26,"h3r":6.07,"h5":4.94,"h5r":3.2},{"m":"2010-01","y":3.73,"h1":6.06,"h1r":4.36,"h3":8.0,"h3r":5.83,"h5":5.78,"h5r":4.19},{"m":"2010-02","y":3.69,"h1":4.03,"h1r":1.88,"h3":7.6,"h3r":5.16,"h5":5.49,"h5r":3.82},{"m":"2010-03","y":3.73,"h1":5.84,"h1r":3.07,"h3":7.73,"h3r":5.34,"h5":5.42,"h5r":3.71},{"m":"2010-04","y":3.85,"h1":6.41,"h1r":3.15,"h3":8.68,"h3r":6.37,"h5":5.78,"h5r":4.07},{"m":"2010-05","y":3.42,"h1":5.21,"h1r":1.59,"h3":6.8,"h3r":4.5,"h5":4.52,"h5r":2.74},{"m":"2010-06","y":3.2,"h1":4.77,"h1r":1.17,"h3":4.94,"h3r":2.56,"h5":3.82,"h5r":1.96},{"m":"2010-07","y":3.01,"h1":3.09,"h1r":-0.52,"h3":3.51,"h3r":1.15,"h5":3.55,"h5r":1.69},{"m":"2010-08","y":2.7,"h1":6.59,"h1r":2.71,"h3":2.11,"h3r":-0.2,"h5":3.26,"h5r":1.47},{"m":"2010-09","y":2.65,"h1":9.13,"h1r":5.07,"h3":1.76,"h3r":-0.56,"h5":3.17,"h5r":1.42},{"m":"2010-10","y":2.54,"h1":6.41,"h1r":2.78,"h3":2.0,"h3r":-0.21,"h5":3.14,"h5r":1.43},{"m":"2010-11","y":2.76,"h1":9.78,"h1r":6.18,"h3":2.36,"h3r":0.23,"h5":3.18,"h5r":1.52},{"m":"2010-12","y":3.29,"h1":15.13,"h1r":11.81,"h3":3.38,"h3r":1.29,"h5":4.15,"h5r":2.58},{"m":"2011-01","y":3.39,"h1":16.07,"h1r":12.77,"h3":3.78,"h3r":1.71,"h5":4.59,"h5r":3.07},{"m":"2011-02","y":3.58,"h1":17.79,"h1r":14.5,"h3":4.76,"h3r":2.72,"h5":5.48,"h5r":4.03},{"m":"2011-03","y":3.41,"h1":13.93,"h1r":10.99,"h3":4.22,"h3r":2.3,"h5":4.94,"h5r":3.61},{"m":"2011-04","y":3.46,"h1":15.51,"h1r":12.91,"h3":4.37,"h3r":2.56,"h5":5.15,"h5r":3.86},{"m":"2011-05","y":3.17,"h1":15.17,"h1r":13.24,"h3":3.96,"h3r":2.19,"h5":4.62,"h5r":3.34},{"m":"2011-06","y":3.0,"h1":15.26,"h1r":13.37,"h3":3.33,"h3r":1.47,"h5":4.62,"h5r":3.25},{"m":"2011-07","y":3.0,"h1":16.08,"h1r":14.47,"h3":3.5,"h3r":1.68,"h5":4.86,"h5r":3.54},{"m":"2011-08","y":2.3,"h1":7.72,"h1r":5.93,"h3":1.8,"h3r":0.16,"h5":3.47,"h5r":2.21},{"m":"2011-09","y":1.98,"h1":4.29,"h1r":2.25,"h3":0.52,"h3r":-1.07,"h5":2.75,"h5r":1.48},{"m":"2011-10","y":2.15,"h1":5.58,"h1r":3.34,"h3":1.73,"h3r":0.13,"h5":2.81,"h5r":1.47},{"m":"2011-11","y":2.01,"h1":5.19,"h1r":3.36,"h3":1.22,"h3r":-0.22,"h5":1.85,"h5r":0.54},{"m":"2011-12","y":1.98,"h1":4.21,"h1r":2.42,"h3":1.5,"h3r":0.16,"h5":1.16,"h5r":-0.19},{"m":"2012-01","y":1.97,"h1":2.32,"h1r":0.71,"h3":2.47,"h3r":1.43,"h5":1.26,"h5r":-0.13},{"m":"2012-02","y":1.97,"h1":1.67,"h1r":-0.3,"h3":2.16,"h3r":1.12,"h5":1.29,"h5r":-0.08},{"m":"2012-03","y":2.17,"h1":3.69,"h1r":2.19,"h3":2.58,"h3r":1.6,"h5":1.55,"h5r":0.32},{"m":"2012-04","y":2.05,"h1":4.43,"h1r":3.33,"h3":2.52,"h3r":1.57,"h5":1.66,"h5r":0.43},{"m":"2012-05","y":1.8,"h1":0.54,"h1r":-0.81,"h3":0.97,"h3r":-0.17,"h5":1.21,"h5r":-0.06},{"m":"2012-06","y":1.62,"h1":-4.29,"h1r":-5.94,"h3":-0.04,"h3r":-1.33,"h5":1.09,"h5r":-0.23},{"m":"2012-07","y":1.53,"h1":-7.33,"h1r":-9.11,"h3":-0.17,"h3r":-1.52,"h5":0.7,"h5r":-0.63},{"m":"2012-08","y":1.68,"h1":-7.26,"h1r":-8.65,"h3":0.75,"h3r":-0.38,"h5":1.18,"h5r":-0.1},{"m":"2012-09","y":1.72,"h1":-7.4,"h1r":-8.49,"h3":0.89,"h3r":-0.05,"h5":1.28,"h5r":-0.01},{"m":"2012-10","y":1.75,"h1":-5.54,"h1r":-6.44,"h3":1.29,"h3r":0.35,"h5":1.06,"h5r":-0.23},{"m":"2012-11","y":1.65,"h1":-7.13,"h1r":-8.27,"h3":0.43,"h3r":-0.59,"h5":0.9,"h5r":-0.48},{"m":"2012-12","y":1.72,"h1":-7.89,"h1r":-9.26,"h3":0.71,"h3r":-0.28,"h5":0.96,"h5r":-0.47},{"m":"2013-01","y":1.91,"h1":-5.88,"h1r":-7.35,"h3":1.76,"h3r":0.8,"h5":1.0,"h5r":-0.48},{"m":"2013-02","y":1.98,"h1":-3.99,"h1r":-5.06,"h3":2.92,"h3r":2.2,"h5":0.65,"h5r":-0.75},{"m":"2013-03","y":1.96,"h1":-4.19,"h1r":-5.61,"h3":2.51,"h3r":1.74,"h5":0.66,"h5r":-0.73},{"m":"2013-04","y":1.76,"h1":-5.75,"h1r":-7.55,"h3":2.14,"h3r":1.18,"h5":0.26,"h5r":-1.22},{"m":"2013-05","y":1.93,"h1":-2.97,"h1r":-4.99,"h3":2.67,"h3r":1.62,"h5":0.4,"h5r":-1.13},{"m":"2013-06","y":2.3,"h1":0.01,"h1r":-2.02,"h3":4.34,"h3r":3.24,"h5":1.2,"h5r":-0.33},{"m":"2013-07","y":2.58,"h1":3.06,"h1r":1.05,"h3":5.63,"h3r":4.59,"h5":1.75,"h5r":0.22},{"m":"2013-08","y":2.74,"h1":5.59,"h1r":3.83,"h3":5.89,"h3r":4.86,"h5":2.04,"h5r":0.51},{"m":"2013-09","y":2.81,"h1":5.19,"h1r":3.47,"h3":5.84,"h3r":4.77,"h5":1.97,"h5r":0.45},{"m":"2013-10","y":2.62,"h1":5.56,"h1r":3.83,"h3":4.82,"h3r":3.63,"h5":1.38,"h5r":-0.22},{"m":"2013-11","y":2.72,"h1":6.16,"h1r":4.78,"h3":3.9,"h3r":2.7,"h5":1.62,"h5r":0.04},{"m":"2013-12","y":2.9,"h1":8.93,"h1r":8.11,"h3":3.35,"h3r":2.14,"h5":2.44,"h5r":0.92},{"m":"2014-01","y":2.86,"h1":11.72,"h1r":11.82,"h3":3.4,"h3r":2.12,"h5":2.58,"h5r":1.09},{"m":"2014-02","y":2.71,"h1":9.22,"h1r":9.24,"h3":2.98,"h3r":1.72,"h5":2.37,"h5r":0.87},{"m":"2014-03","y":2.72,"h1":8.66,"h1r":8.74,"h3":2.82,"h3r":1.75,"h5":2.58,"h5r":1.09},{"m":"2014-04","y":2.71,"h1":9.48,"h1r":9.7,"h3":3.32,"h3r":2.26,"h5":2.63,"h5r":1.1},{"m":"2014-05","y":2.56,"h1":5.52,"h1r":5.56,"h3":2.87,"h3r":1.9,"h5":2.6,"h5r":1.1},{"m":"2014-06","y":2.6,"h1":4.36,"h1r":4.24,"h3":3.31,"h3r":2.37,"h5":3.26,"h5r":1.79},{"m":"2014-07","y":2.54,"h1":4.17,"h1r":3.99,"h3":2.73,"h3r":1.8,"h5":3.16,"h5r":1.65},{"m":"2014-08","y":2.42,"h1":4.44,"h1r":4.23,"h3":2.69,"h3r":1.61,"h5":3.73,"h5r":2.18},{"m":"2014-09","y":2.53,"h1":5.42,"h1r":5.46,"h3":3.05,"h3r":1.81,"h5":3.79,"h5r":2.23},{"m":"2014-10","y":2.3,"h1":4.22,"h1r":4.04,"h3":1.87,"h3r":0.59,"h5":3.34,"h5r":1.69},{"m":"2014-11","y":2.33,"h1":2.73,"h1r":2.21,"h3":1.99,"h3r":0.52,"h5":3.2,"h5r":1.45},{"m":"2014-12","y":2.21,"h1":1.82,"h1r":1.08,"h3":1.49,"h3r":-0.15,"h5":2.88,"h5r":1.04},{"m":"2015-01","y":1.88,"h1":0.21,"h1r":-1.15,"h3":-0.02,"h3r":-1.96,"h5":2.46,"h5r":0.45},{"m":"2015-02","y":1.98,"h1":3.96,"h1r":2.92,"h3":-0.51,"h3r":-2.45,"h5":3.12,"h5r":1.14},{"m":"2015-03","y":2.04,"h1":3.47,"h1r":2.6,"h3":-0.25,"h3r":-2.07,"h5":4.43,"h5r":2.59},{"m":"2015-04","y":1.94,"h1":3.28,"h1r":2.13,"h3":-0.61,"h3r":-2.49,"h5":4.64,"h5r":2.97},{"m":"2015-05","y":2.2,"h1":5.7,"h1r":4.64,"h3":-0.12,"h3r":-1.98,"h5":5.09,"h5r":3.52},{"m":"2015-06","y":2.36,"h1":8.83,"h1r":7.76,"h3":0.57,"h3r":-1.24,"h5":5.24,"h5r":3.62},{"m":"2015-07","y":2.32,"h1":9.78,"h1r":8.88,"h3":0.53,"h3r":-1.28,"h5":5.35,"h5r":3.64},{"m":"2015-08","y":2.17,"h1":7.67,"h1r":6.54,"h3":0.1,"h3r":-1.76,"h5":4.99,"h5r":3.18},{"m":"2015-09","y":2.17,"h1":6.93,"h1r":5.39,"h3":-0.19,"h3r":-2.14,"h5":4.9,"h5r":3.03},{"m":"2015-10","y":2.07,"h1":4.69,"h1r":3.01,"h3":-0.89,"h3r":-2.89,"h5":4.47,"h5r":2.59},{"m":"2015-11","y":2.26,"h1":2.86,"h1r":1.15,"h3":-0.21,"h3r":-2.19,"h5":4.64,"h5r":2.73},{"m":"2015-12","y":2.24,"h1":-0.47,"h1r":-2.49,"h3":0.57,"h3r":-1.43,"h5":4.46,"h5r":2.46},{"m":"2016-01","y":2.09,"h1":-1.24,"h1r":-3.65,"h3":0.49,"h3r":-1.52,"h5":3.87,"h5r":1.83},{"m":"2016-02","y":1.78,"h1":-3.82,"h1r":-6.39,"h3":-0.33,"h3r":-2.43,"h5":2.93,"h5r":0.82},{"m":"2016-03","y":1.89,"h1":-3.32,"h1r":-5.57,"h3":0.34,"h3r":-1.82,"h5":2.46,"h5r":0.3},{"m":"2016-04","y":1.81,"h1":-2.44,"h1r":-4.54,"h3":0.24,"h3r":-1.94,"h5":2.25,"h5r":0.03},{"m":"2016-05","y":1.81,"h1":-2.4,"h1r":-4.2,"h3":0.64,"h3r":-1.49,"h5":2.28,"h5r":-0.02},{"m":"2016-06","y":1.64,"h1":-2.92,"h1r":-4.48,"h3":1.11,"h3r":-0.92,"h5":2.15,"h5r":-0.27},{"m":"2016-07","y":1.5,"h1":-5.2,"h1r":-6.81,"h3":0.72,"h3r":-1.41,"h5":2.27,"h5r":-0.28},{"m":"2016-08","y":1.56,"h1":-3.69,"h1r":-5.52,"h3":2.22,"h3r":0.09,"h5":2.45,"h5r":-0.13},{"m":"2016-09","y":1.63,"h1":-2.93,"h1r":-5.05,"h3":2.23,"h3r":0.15,"h5":2.41,"h5r":-0.18},{"m":"2016-10","y":1.76,"h1":-3.11,"h1r":-5.05,"h3":2.6,"h3r":0.48,"h5":2.25,"h5r":-0.47},{"m":"2016-11","y":2.14,"h1":0.41,"h1r":-1.75,"h3":3.47,"h3r":1.3,"h5":2.99,"h5r":0.12},{"m":"2016-12","y":2.49,"h1":3.14,"h1r":1.01,"h3":4.38,"h3r":2.23,"h5":3.79,"h5r":0.84},{"m":"2017-01","y":2.43,"h1":0.99,"h1r":-1.06,"h3":4.49,"h3r":2.41,"h5":3.11,"h5r":0.14},{"m":"2017-02","y":2.42,"h1":-1.51,"h1r":-3.64,"h3":5.26,"h3r":3.18,"h5":2.77,"h5r":-0.32},{"m":"2017-03","y":2.48,"h1":-0.78,"h1r":-3.07,"h3":7.48,"h3r":5.45,"h5":2.5,"h5r":-0.83},{"m":"2017-04","y":2.3,"h1":-2.55,"h1r":-4.89,"h3":7.58,"h3r":5.89,"h5":1.05,"h5r":-2.27},{"m":"2017-05","y":2.3,"h1":-3.42,"h1r":-6.05,"h3":7.5,"h3r":5.84,"h5":0.8,"h5r":-2.72},{"m":"2017-06","y":2.19,"h1":-3.72,"h1r":-6.41,"h3":6.9,"h3r":5.09,"h5":0.21,"h5r":-3.54},{"m":"2017-07","y":2.32,"h1":-2.39,"h1r":-5.18,"h3":7.64,"h3r":5.62,"h5":0.86,"h5r":-2.92},{"m":"2017-08","y":2.21,"h1":-3.28,"h1r":-5.82,"h3":7.14,"h3r":5.12,"h5":0.67,"h5r":-3.03},{"m":"2017-09","y":2.2,"h1":-4.22,"h1r":-6.35,"h3":6.96,"h3r":5.08,"h5":-0.39,"h5r":-4.0},{"m":"2017-10","y":2.36,"h1":-4.02,"h1r":-6.38,"h3":7.05,"h3r":5.13,"h5":-0.84,"h5r":-4.52},{"m":"2017-11","y":2.35,"h1":-3.8,"h1r":-5.85,"h3":6.7,"h3r":4.81,"h5":-0.69,"h5r":-4.35},{"m":"2017-12","y":2.4,"h1":-0.91,"h1r":-2.77,"h3":6.61,"h3r":4.67,"h5":-0.14,"h5r":-3.77},{"m":"2018-01","y":2.58,"h1":1.74,"h1r":0.19,"h3":6.62,"h3r":4.72,"h5":0.35,"h5r":-3.36},{"m":"2018-02","y":2.86,"h1":4.52,"h1r":2.96,"h3":6.84,"h3r":4.91,"h5":0.49,"h5r":-3.24},{"m":"2018-03","y":2.84,"h1":5.33,"h1r":3.4,"h3":5.58,"h3r":3.51,"h5":0.61,"h5r":-3.14},{"m":"2018-04","y":2.87,"h1":5.94,"h1r":3.87,"h3":5.54,"h3r":3.32,"h5":1.01,"h5r":-2.78},{"m":"2018-05","y":2.98,"h1":8.13,"h1r":6.23,"h3":5.9,"h3r":3.54,"h5":1.03,"h5r":-2.73},{"m":"2018-06","y":2.91,"h1":10.59,"h1r":8.8,"h3":5.97,"h3r":3.35,"h5":0.62,"h5r":-3.16},{"m":"2018-07","y":2.89,"h1":10.43,"h1r":8.46,"h3":6.52,"h3r":3.72,"h5":0.35,"h5r":-3.45},{"m":"2018-08","y":2.89,"h1":14.67,"h1r":12.7,"h3":6.61,"h3r":3.75,"h5":-0.07,"h5r":-3.93},{"m":"2018-09","y":3.0,"h1":14.9,"h1r":12.97,"h3":6.6,"h3r":3.69,"h5":-0.2,"h5r":-4.08},{"m":"2018-10","y":3.15,"h1":16.14,"h1r":14.13,"h3":6.32,"h3r":3.19,"h5":-0.59,"h5r":-4.41},{"m":"2018-11","y":3.12,"h1":14.67,"h1r":12.36,"h3":6.25,"h3r":2.84,"h5":-0.14,"h5r":-4.01},{"m":"2018-12","y":2.83,"h1":11.26,"h1r":8.78,"h3":5.62,"h3r":2.02,"h5":0.15,"h5r":-3.77},{"m":"2019-01","y":2.71,"h1":11.03,"h1r":8.34,"h3":4.29,"h3r":0.52,"h5":-0.1,"h5r":-4.08},{"m":"2019-02","y":2.68,"h1":13.3,"h1r":10.71,"h3":3.64,"h3r":-0.27,"h5":-0.37,"h5r":-4.38},{"m":"2019-03","y":2.57,"h1":18.8,"h1r":17.0,"h3":2.68,"h3r":-1.45,"h5":-0.54,"h5r":-4.55},{"m":"2019-04","y":2.53,"h1":20.6,"h1r":20.21,"h3":0.69,"h3r":-3.37,"h5":-1.1,"h5r":-5.07},{"m":"2019-05","y":2.4,"h1":18.95,"h1r":18.81,"h3":-0.11,"h3r":-4.42,"h5":-1.2,"h5r":-5.15},{"m":"2019-06","y":2.07,"h1":14.72,"h1r":13.99,"h3":-1.73,"h3r":-6.39,"h5":-1.47,"h5r":-5.42},{"m":"2019-07","y":2.06,"h1":15.7,"h1r":14.57,"h3":-1.07,"h3r":-5.7,"h5":-1.36,"h5r":-5.3},{"m":"2019-08","y":1.63,"h1":10.89,"h1r":9.46,"h3":-2.3,"h3r":-6.87,"h5":-1.48,"h5r":-5.43},{"m":"2019-09","y":1.7,"h1":11.19,"h1r":9.68,"h3":-3.77,"h3r":-8.31,"h5":-1.08,"h5r":-5.06},{"m":"2019-10","y":1.71,"h1":10.03,"h1r":8.75,"h3":-4.9,"h3r":-9.44,"h5":-1.64,"h5r":-5.58},{"m":"2019-11","y":1.81,"h1":10.11,"h1r":8.83,"h3":-4.32,"h3r":-8.88,"h5":-1.83,"h5r":-5.76},{"m":"2019-12","y":1.86,"h1":9.89,"h1r":8.42,"h3":-3.42,"h3r":-7.95,"h5":-1.75,"h5r":-5.71},{"m":"2020-01","y":1.76,"h1":7.3,"h1r":5.81,"h3":-3.42,"h3r":-8.08,"h5":-2.26,"h5r":-6.24},{"m":"2020-02","y":1.5,"h1":2.99,"h1r":1.29,"h3":-4.71,"h3r":-9.39,"h5":-2.4,"h5r":-6.41},{"m":"2020-03","y":0.87,"h1":-5.93,"h1r":-8.33,"h3":-6.25,"h3r":-11.01,"h5":-3.21,"h5r":-7.27},{"m":"2020-04","y":0.66,"h1":-7.98,"h1r":-11.66,"h3":-6.28,"h3r":-11.39,"h5":-3.54,"h5r":-7.77},{"m":"2020-05","y":0.67,"h1":-7.65,"h1r":-12.04,"h3":-6.47,"h3r":-11.64,"h5":-3.68,"h5r":-7.94},{"m":"2020-06","y":0.73,"h1":-6.2,"h1r":-10.99,"h3":-6.68,"h3r":-11.77,"h5":-3.45,"h5r":-7.68},{"m":"2020-07","y":0.62,"h1":-5.4,"h1r":-10.21,"h3":-7.3,"h3r":-12.28,"h5":-3.61,"h5r":-7.77},{"m":"2020-08","y":0.65,"h1":-4.72,"h1r":-9.47,"h3":-7.81,"h3r":-12.79,"h5":-3.3,"h5r":-7.47},{"m":"2020-09","y":0.68,"h1":-5.19,"h1r":-10.03,"h3":-8.15,"h3r":-13.14,"h5":-2.97,"h5r":-7.17},{"m":"2020-10","y":0.79,"h1":-5.97,"h1r":-11.47,"h3":-8.75,"h3r":-13.69,"h5":-2.61},{"m":"2020-11","y":0.87,"h1":-5.01,"h1r":-11.07,"h3":-7.7,"h3r":-12.65,"h5":-2.46,"h5r":-6.65},{"m":"2020-12","y":0.93,"h1":-3.63,"h1r":-9.96,"h3":-6.25,"h3r":-11.22,"h5":-2.38,"h5r":-6.55},{"m":"2021-01","y":1.08,"h1":-4.78,"h1r":-11.4,"h3":-5.83,"h3r":-10.86,"h5":-2.16,"h5r":-6.33},{"m":"2021-02","y":1.26,"h1":-4.58,"h1r":-11.54,"h3":-5.6,"h3r":-10.66,"h5":-1.65,"h5r":-5.83},{"m":"2021-03","y":1.61,"h1":-3.13,"h1r":-10.76,"h3":-4.5,"h3r":-9.6,"h5":-1.15,"h5r":-5.42},{"m":"2021-04","y":1.64,"h1":-8.01,"h1r":-15.03,"h3":-5.18,"h3r":-10.12,"h5":-1.17,"h5r":-5.44},{"m":"2021-05","y":1.62,"h1":-9.28,"h1r":-16.45,"h3":-5.01,"h3r":-9.77,"h5":-1.41,"h5r":-5.64},{"m":"2021-06","y":1.52,"h1":-11.83,"h1r":-19.15,"h3":-4.8,"h3r":-9.3,"h5":-1.53,"h5r":-5.51},{"m":"2021-07","y":1.32,"h1":-11.54,"h1r":-18.49,"h3":-5.16,"h3r":-9.53,"h5":-2.04,"h5r":-5.91},{"m":"2021-08","y":1.28,"h1":-11.75,"h1r":-18.48,"h3":-4.23,"h3r":-8.61},{"m":"2021-09","y":1.37,"h1":-15.47,"h1r":-21.88,"h3":-3.5,"h3r":-7.88},{"m":"2021-10","y":1.58,"h1":-16.88,"h1r":-22.86,"h3":-3.82,"h3r":-7.96},{"m":"2021-11","y":1.56,"h1":-16.26,"h1r":-21.82,"h3":-4.48,"h3r":-8.43},{"m":"2021-12","y":1.47,"h1":-14.94,"h1r":-20.1,"h3":-4.74,"h3r":-8.6},{"m":"2022-01","y":1.76,"h1":-11.84,"h1r":-17.15,"h3":-4.42,"h3r":-8.24},{"m":"2022-02","y":1.93,"h1":-11.96,"h1r":-16.97,"h3":-3.4,"h3r":-7.11},{"m":"2022-03","y":2.13,"h1":-9.57,"h1r":-13.86,"h3":-2.32,"h3r":-5.72},{"m":"2022-04","y":2.75,"h1":-2.76,"h1r":-7.32,"h3":-0.46,"h3r":-3.85},{"m":"2022-05","y":2.9,"h1":-2.33,"h1r":-6.13,"h3":-0.36,"h3r":-3.47},{"m":"2022-06","y":3.14,"h1":-1.73,"h1r":-4.56,"h3":0.47,"h3r":-2.33},{"m":"2022-07","y":2.9,"h1":-4.83,"h1r":-7.76,"h3":-0.2,"h3r":-3.03},{"m":"2022-08","y":2.9,"h1":-6.82,"h1r":-10.11,"h3":0.19,"h3r":-2.76},{"m":"2022-09","y":3.52,"h1":-3.31,"h1r":-6.76,"h3":2.39,"h3r":-0.64},{"m":"2022-10","y":3.98,"h1":-2.78,"h1r":-5.83,"h3":3.87},{"m":"2022-11","y":3.89,"h1":-1.13,"h1r":-4.14,"h3":3.54,"h3r":0.65},{"m":"2022-12","y":3.62,"h1":0.52,"h1r":-2.74,"h3":2.65,"h3r":-0.31},{"m":"2023-01","y":3.53,"h1":-0.52,"h1r":-3.5,"h3":2.22,"h3r":-0.59},{"m":"2023-02","y":3.75,"h1":0.14,"h1r":-2.93,"h3":3.08,"h3r":0.28},{"m":"2023-03","y":3.66,"h1":-0.56,"h1r":-3.9,"h3":2.51,"h3r":-0.52},{"m":"2023-04","y":3.46,"h1":-4.69,"h1r":-7.79,"h3":1.77,"h3r":-1.34},{"m":"2023-05","y":3.57,"h1":-3.28,"h1r":-6.34,"h3":1.68,"h3r":-1.56},{"m":"2023-06","y":3.75,"h1":-0.42,"h1r":-3.3,"h3":2.23,"h3r":-0.8},{"m":"2023-07","y":3.9,"h1":1.34,"h1r":-1.51,"h3":2.32,"h3r":-0.65},{"m":"2023-08","y":4.17,"h1":6.82,"h1r":4.18},{"m":"2023-09","y":4.38,"h1":9.94,"h1r":7.32},{"m":"2023-10","y":4.8,"h1":10.12,"h1r":7.33},{"m":"2023-11","y":4.5,"h1":5.29,"h1r":2.47},{"m":"2023-12","y":4.02,"h1":1.1,"h1r":-1.74},{"m":"2024-01","y":4.06,"h1":-0.45,"h1r":-3.35},{"m":"2024-02","y":4.21,"h1":2.24,"h1r":-0.56},{"m":"2024-03","y":4.21,"h1":3.65,"h1r":1.23},{"m":"2024-04","y":4.54,"h1":6.43,"h1r":4.02},{"m":"2024-05","y":4.48,"h1":4.72,"h1r":2.32},{"m":"2024-06","y":4.31,"h1":3.65,"h1r":0.95},{"m":"2024-07","y":4.25,"h1":3.08,"h1r":0.36},{"m":"2024-08","y":3.87,"h1":1.03,"h1r":-1.83},{"m":"2024-09","y":3.72,"h1":0.96,"h1r":-1.99},{"m":"2024-10","y":4.1,"h1":4.69},{"m":"2024-11","y":4.36,"h1":6.64,"h1r":3.8},{"m":"2024-12","y":4.39,"h1":6.44,"h1r":3.66},{"m":"2025-01","y":4.63,"h1":7.85,"h1r":5.34},{"m":"2025-02","y":4.45,"h1":6.99,"h1r":4.46},{"m":"2025-03","y":4.28,"h1":4.51,"h1r":1.22},{"m":"2025-04","y":4.28,"h1":3.93,"h1r":0.11},{"m":"2025-05","y":4.42,"h1":3.77,"h1r":-0.46},{"m":"2025-06","y":4.38,"h1":3.53,"h1r":-0.01},{"m":"2025-07","y":4.39,"h1":2.56,"h1r":-0.78},{"m":"2025-08","y":4.26},{"m":"2025-09","y":4.12},{"m":"2025-10","y":4.06},{"m":"2025-11","y":4.09},{"m":"2025-12","y":4.14},{"m":"2026-01","y":4.21},{"m":"2026-02","y":4.13},{"m":"2026-03","y":4.25},{"m":"2026-04","y":4.32},{"m":"2026-05","y":4.48},{"m":"2026-06","y":4.47},{"m":"2026-07","y":4.6}]}</script>
+<script>
+/* 국채금리 수익률 계산기
+   app/data/ust10y_panel.json (또는 인라인 <script id="ust10y-data">)을 읽어
+   입력 금리 주변의 과거 관측치를 모아 통계를 낸다. 라이브러리 없음. */
+(function () {
+  "use strict";
+
+  var NS = "http://www.w3.org/2000/svg";
+  var HALO = "paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round";
+  var DATA = null;
+  var PANEL = [];
+  var tip = document.getElementById("tooltip");
+
+  var state = { rate: 4.6, basis: "nom", win: 0.5, hz: "h5", era: "e1953" };
+
+  var HZ = [
+    { id: "h1", label: "1년", word: "1년 후" },
+    { id: "h3", label: "3년", word: "3년 후" },
+    { id: "h5", label: "5년", word: "5년 후" }
+  ];
+  var BASIS = [
+    { id: "nom", label: "명목", word: "명목" },
+    { id: "real", label: "실질(물가조정)", word: "물가를 뺀 실질" }
+  ];
+  var WINDOWS = [
+    { id: 0.25, label: "±0.25%p" },
+    { id: 0.5, label: "±0.5%p" },
+    { id: 1, label: "±1%p" }
+  ];
+  /* 기준 기간은 서로 포개진다: 1953년 이후 ⊃ 1980년 이후 ⊃ 2010년 이후 */
+  var ERAS = [
+    { id: "e1953", from: "1953-04", label: "1953년~", name: "1950년대 이후", segs: 3 },
+    { id: "e1980", from: "1980-01", label: "1980년~", name: "1980년대 이후", segs: 2 },
+    { id: "e2010", from: "2010-01", label: "2010년~", name: "2010년대 이후", segs: 1 }
+  ];
+  /* 그래프의 점 색은 겹치지 않는 세 구간으로 나눈다 */
+  var SEGS = [
+    { from: "1953-04", to: "1979-12", label: "1953–79", token: "--era-1" },
+    { from: "1980-01", to: "2009-12", label: "1980–2009", token: "--era-2" },
+    { from: "2010-01", to: "9999-99", label: "2010–", token: "--era-3" }
+  ];
+  var BUCKETS = [
+    { lo: 0, hi: 2, label: "2% 미만" },
+    { lo: 2, hi: 3, label: "2 – 3%" },
+    { lo: 3, hi: 4, label: "3 – 4%" },
+    { lo: 4, hi: 5, label: "4 – 5%" },
+    { lo: 5, hi: 6, label: "5 – 6%" },
+    { lo: 6, hi: 7, label: "6 – 7%" },
+    { lo: 7, hi: 8, label: "7 – 8%" },
+    { lo: 8, hi: 10, label: "8 – 10%" },
+    { lo: 10, hi: 99, label: "10% 이상" }
+  ];
+  var PRESETS = [1, 2, 3, 4, 5, 6, 8, 10];
+
+  /* ------------------------------------------------------------ utils */
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, attrs, parent) {
+    var n = document.createElementNS(NS, tag), k;
+    for (k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  function minus(s) { return s.replace(/-/g, "−"); }
+
+  function pct(v, digits) {
+    if (v === null || v === undefined || isNaN(v)) return "–";
+    var d = digits === undefined ? 1 : digits;
+    return minus((v > 0 ? "+" : "") + v.toFixed(d)) + "%";
+  }
+
+  function signClass(v) {
+    if (v === null || v === undefined || isNaN(v)) return "";
+    return v >= 0 ? "pos" : "neg";
+  }
+
+  function key(hz) { return hz + (state.basis === "real" ? "r" : ""); }
+
+  function monthKo(m) { return m.slice(0, 4) + "년 " + String(Number(m.slice(5))) + "월"; }
+
+  function mean(a) {
+    var s = 0, i;
+    for (i = 0; i < a.length; i++) s += a[i];
+    return s / a.length;
+  }
+
+  function quantile(sorted, q) {
+    if (!sorted.length) return null;
+    var pos = (sorted.length - 1) * q, base = Math.floor(pos), rest = pos - base;
+    if (sorted[base + 1] === undefined) return sorted[base];
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  }
+
+  /* 시작 금리가 test를 통과한 달들의 이후 수익률 통계 */
+  function collect(eraFrom, hz, test) {
+    var k = key(hz), vals = [], best = null, worst = null, i, row, v;
+    for (i = 0; i < PANEL.length; i++) {
+      row = PANEL[i];
+      if (row.m < eraFrom) continue;
+      v = row[k];
+      if (v === undefined) continue;
+      if (!test(row.y)) continue;
+      vals.push(v);
+      if (!best || v > best.v) best = { v: v, m: row.m };
+      if (!worst || v < worst.v) worst = { v: v, m: row.m };
+    }
+    if (!vals.length) return { n: 0 };
+    var sorted = vals.slice().sort(function (a, b) { return a - b; });
+    var up = 0;
+    for (i = 0; i < vals.length; i++) if (vals[i] > 0) up++;
+    return {
+      n: vals.length,
+      mean: mean(vals),
+      median: quantile(sorted, 0.5),
+      p10: quantile(sorted, 0.1),
+      p90: quantile(sorted, 0.9),
+      best: best,
+      worst: worst,
+      up: up / vals.length
+    };
+  }
+
+  /* 입력 금리 ± 폭 */
+  function stats(eraFrom, hz, rate, win) {
+    return collect(eraFrom, hz, function (y) { return Math.abs(y - rate) <= win + 1e-9; });
+  }
+
+  /* 구간 [lo, hi) — 경계에 걸친 달이 두 줄에 겹쳐 세어지지 않게 한쪽만 닫는다 */
+  function bucketStats(eraFrom, hz, lo, hi) {
+    return collect(eraFrom, hz, function (y) { return y >= lo && y < hi; });
+  }
+
+  function correlation(hz, eraFrom) {
+    var k = key(hz), xs = [], ys = [], i, row;
+    for (i = 0; i < PANEL.length; i++) {
+      row = PANEL[i];
+      if (row.m < eraFrom || row[k] === undefined) continue;
+      xs.push(row.y); ys.push(row[k]);
+    }
+    if (xs.length < 3) return null;
+    var mx = mean(xs), my = mean(ys), sxy = 0, sxx = 0, syy = 0, dx, dy;
+    for (i = 0; i < xs.length; i++) {
+      dx = xs[i] - mx; dy = ys[i] - my;
+      sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
+    }
+    return sxy / Math.sqrt(sxx * syy);
+  }
+
+  /* ------------------------------------------------------------ chrome */
+  function seg(host, items, current, onPick) {
+    host.textContent = "";
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = it.label;
+      b.setAttribute("aria-pressed", String(it.id === current));
+      b.addEventListener("click", function () { onPick(it.id); });
+      host.appendChild(b);
+    });
+  }
+
+  function buildControls() {
+    seg($("opt-basis"), BASIS, state.basis, function (id) { state.basis = id; render(); });
+    seg($("opt-window"), WINDOWS, state.win, function (id) { state.win = id; render(); });
+    seg($("opt-hz"), HZ, state.hz, function (id) { state.hz = id; render(); });
+    seg($("opt-era"), ERAS.map(function (e) { return { id: e.id, label: e.label }; }),
+        state.era, function (id) { state.era = id; render(); });
+
+    var host = $("presets");
+    host.textContent = "";
+    PRESETS.forEach(function (r) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = r + "%";
+      b.addEventListener("click", function () { setRate(r); });
+      host.appendChild(b);
+    });
+    var now = document.createElement("button");
+    now.type = "button";
+    now.textContent = "최근 " + DATA.meta.latestRate.toFixed(2) + "%";
+    now.addEventListener("click", function () { setRate(DATA.meta.latestRate); });
+    host.appendChild(now);
+  }
+
+  function setRate(v) {
+    v = Math.min(16, Math.max(0.5, Number(v)));
+    if (isNaN(v)) return;
+    state.rate = v;
+    $("rate-number").value = v.toFixed(2);
+    $("rate-range").value = v;
+    render();
+  }
+
+  /* ------------------------------------------------------------ verdict */
+  function levelChip(rate) {
+    var below = 0, i;
+    for (i = 0; i < PANEL.length; i++) if (PANEL[i].y < rate) below++;
+    var share = Math.round(below / PANEL.length * 100);
+    var word = rate < 2 ? "매우 낮음" : rate < 3.5 ? "낮음" : rate < 5 ? "보통"
+             : rate < 7 ? "높은 편" : rate < 10 ? "높음" : "매우 높음";
+    return word + " · 1953년 이후 " + share + "%가 이보다 낮았음";
+  }
+
+  function renderVerdict() {
+    var hz = HZ.filter(function (h) { return h.id === state.hz; })[0];
+    var parts = ERAS.map(function (era) {
+      var s = stats(era.from, state.hz, state.rate, state.win);
+      if (!s.n) return era.label + " 표본 없음";
+      return era.label + " <span class=\"num " + signClass(s.mean) + "\">" + pct(s.mean) +
+             "</span> <span class=\"num\">(" + s.n + "개월)</span>";
+    });
+    $("verdict").innerHTML =
+      "금리 <strong class=\"num\">" + state.rate.toFixed(2) + "%</strong> 안팎(±" +
+      state.win + "%p)에서 시작한 달의 <strong>" + hz.word + "</strong> " +
+      BASIS.filter(function (b) { return b.id === state.basis; })[0].word +
+      " 연평균 총수익률 — " + parts.join(", ") + ".";
+  }
+
+  /* -------------------------------------------------------------- eras */
+  function renderEras() {
+    var host = $("era-grid");
+    host.textContent = "";
+    ERAS.forEach(function (era) {
+      var card = document.createElement("article");
+      card.className = "era";
+
+      var head = document.createElement("div");
+      head.className = "era-head";
+      var sw = document.createElement("div");
+      sw.className = "era-swatch";
+      SEGS.slice(SEGS.length - era.segs).forEach(function (s) {
+        var i = document.createElement("i");
+        i.style.background = "var(" + s.token + ")";
+        sw.appendChild(i);
+      });
+      head.appendChild(sw);
+      var h3 = document.createElement("h3");
+      h3.textContent = era.name;
+      head.appendChild(h3);
+      var sub = document.createElement("div");
+      sub.className = "era-sub";
+      sub.textContent = era.from.replace("-", ".") + " – " + DATA.meta.last.replace("-", ".");
+      head.appendChild(sub);
+      card.appendChild(head);
+
+      var rows = document.createElement("div");
+      rows.className = "hz-rows";
+      HZ.forEach(function (h) {
+        var s = stats(era.from, h.id, state.rate, state.win);
+        var row = document.createElement("div");
+        row.className = "hz" + (s.n ? "" : " empty");
+
+        var lab = document.createElement("div");
+        lab.className = "hz-label";
+        lab.textContent = h.word;
+        row.appendChild(lab);
+
+        var m = document.createElement("div");
+        m.className = "hz-mean " + (s.n ? signClass(s.mean) : "");
+        m.textContent = s.n ? pct(s.mean) : "표본 없음";
+        row.appendChild(m);
+
+        var m1 = document.createElement("div");
+        m1.className = "hz-meta";
+        var m2 = document.createElement("div");
+        m2.className = "hz-meta";
+        if (s.n) {
+          m1.innerHTML = "중앙값 " + pct(s.median) + " · 플러스 " +
+                         Math.round(s.up * 100) + "%";
+          m2.innerHTML = minus("최저 " + pct(s.worst.v) + " ~ 최고 " + pct(s.best.v)) +
+                         " · " + s.n + "개월";
+        } else {
+          m1.textContent = "이 기간에 이 금리대가 없었습니다";
+          m2.textContent = "";
+        }
+        row.appendChild(m1);
+        row.appendChild(m2);
+        rows.appendChild(row);
+      });
+      card.appendChild(rows);
+      host.appendChild(card);
+    });
+  }
+
+  /* ------------------------------------------------------------- chart */
+  function segOf(m) {
+    for (var i = 0; i < SEGS.length; i++) if (m >= SEGS[i].from && m <= SEGS[i].to) return SEGS[i];
+    return SEGS[SEGS.length - 1];
+  }
+
+  function showTip(evt, html) {
+    tip.innerHTML = html;
+    tip.classList.add("on");
+    var pad = 14;
+    var x = evt.clientX + pad, y = evt.clientY - pad;
+    var box = tip.getBoundingClientRect();
+    if (x + box.width > window.innerWidth - 8) x = evt.clientX - box.width - pad;
+    if (y < 8) y = evt.clientY + pad;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+  function hideTip() { tip.classList.remove("on"); }
+
+  function renderLegend() {
+    var host = $("legend");
+    host.textContent = "";
+    SEGS.forEach(function (s) {
+      var span = document.createElement("span");
+      var dot = document.createElement("i");
+      dot.style.background = "var(" + s.token + ")";
+      span.appendChild(dot);
+      span.appendChild(document.createTextNode(s.label + " 시작"));
+      host.appendChild(span);
+    });
+  }
+
+  function renderChart() {
+    var shell = $("chart");
+    shell.textContent = "";
+    var k = key(state.hz);
+    var hz = HZ.filter(function (h) { return h.id === state.hz; })[0];
+
+    var pts = [];
+    for (var i = 0; i < PANEL.length; i++) {
+      if (PANEL[i][k] !== undefined) pts.push(PANEL[i]);
+    }
+
+    var w = shell.clientWidth || 820;
+    var h = w < 560 ? 300 : 360;
+    var padL = 46, padR = 18, padT = 14, padB = 44;
+    var pw = w - padL - padR, ph = h - padT - padB;
+
+    var svg = el("svg", { viewBox: "0 0 " + w + " " + h, width: w, height: h,
+                          role: "img", "aria-label":
+                          "시작 금리와 " + hz.word + " 연평균 수익률 산점도" }, shell);
+
+    var xMax = 16, yLo = 0, yHi = 0;
+    pts.forEach(function (p) {
+      if (p[k] < yLo) yLo = p[k];
+      if (p[k] > yHi) yHi = p[k];
+    });
+    yLo = Math.floor((yLo - 1) / 5) * 5;
+    yHi = Math.ceil((yHi + 1) / 5) * 5;
+
+    function X(v) { return padL + v / xMax * pw; }
+    function Y(v) { return padT + (yHi - v) / (yHi - yLo) * ph; }
+
+    /* 입력 금리 밴드 */
+    var bx1 = X(Math.max(0, state.rate - state.win)), bx2 = X(Math.min(xMax, state.rate + state.win));
+    el("rect", { x: bx1, y: padT, width: Math.max(2, bx2 - bx1), height: ph,
+                 style: "fill:var(--band)" }, svg);
+
+    /* 가로 격자 */
+    for (var t = yLo; t <= yHi; t += 5) {
+      var strong = Math.abs(t) < 1e-9;
+      el("line", { x1: padL, y1: Y(t), x2: padL + pw, y2: Y(t),
+                   style: "stroke:var(" + (strong ? "--axis" : "--grid") + ");stroke-width:1" }, svg);
+      el("text", { x: padL - 8, y: Y(t) + 4, "text-anchor": "end",
+                   style: "fill:var(--muted);font-size:11px;font-family:'IBM Plex Mono',monospace" }, svg)
+        .appendChild(document.createTextNode(minus(t + "%")));
+    }
+    /* 세로 눈금 */
+    for (var xv = 0; xv <= xMax; xv += 2) {
+      el("line", { x1: X(xv), y1: padT, x2: X(xv), y2: padT + ph,
+                   style: "stroke:var(--grid);stroke-width:1" }, svg);
+      el("text", { x: X(xv), y: padT + ph + 18, "text-anchor": "middle",
+                   style: "fill:var(--muted);font-size:11px;font-family:'IBM Plex Mono',monospace" }, svg)
+        .appendChild(document.createTextNode(xv + "%"));
+    }
+    el("text", { x: padL + pw, y: padT + ph + 36, "text-anchor": "end",
+                 style: "fill:var(--muted);font-size:11.5px" }, svg)
+      .appendChild(document.createTextNode("→ 시작 시점의 10년 국채금리"));
+
+    /* 만기보유 기준선: 수익률 = 시작 금리 */
+    if (state.basis === "nom") {
+      var dLo = Math.max(yLo, 0), dHi = Math.min(yHi, xMax);
+      el("line", { x1: X(dLo), y1: Y(dLo), x2: X(dHi), y2: Y(dHi),
+                   style: "stroke:var(--axis);stroke-width:1.5;stroke-dasharray:4 4" }, svg);
+      el("text", { x: X(dHi) - 6, y: Y(dHi) - 8, "text-anchor": "end",
+                   style: "fill:var(--muted);font-size:11.5px;" + HALO }, svg)
+        .appendChild(document.createTextNode("수익률 = 시작 금리"));
+    }
+
+    /* 점: 한 달에 하나 */
+    pts.forEach(function (p) {
+      var s = segOf(p.m);
+      el("circle", { cx: X(p.y), cy: Y(p[k]), r: 2.9,
+                     style: "fill:var(" + s.token + ");fill-opacity:.58;" +
+                            "stroke:var(--surface);stroke-width:.6" }, svg);
+    });
+
+    /* 밴드 안 평균 (1953년 이후 전체) */
+    var all = stats(ERAS[0].from, state.hz, state.rate, state.win);
+    if (all.n) {
+      el("line", { x1: bx1 - 6, y1: Y(all.mean), x2: bx2 + 6, y2: Y(all.mean),
+                   style: "stroke:var(--ink);stroke-width:2" }, svg);
+      var lx = bx2 + 10, anchor = "start";
+      if (lx > padL + pw - 90) { lx = bx1 - 10; anchor = "end"; }
+      el("text", { x: lx, y: Y(all.mean) - 7, "text-anchor": anchor,
+                   style: "fill:var(--ink);font-size:11.5px;font-weight:600;" + HALO }, svg)
+        .appendChild(document.createTextNode("1953년 이후 평균 " + pct(all.mean)));
+    }
+
+    /* 호버 */
+    var hit = el("rect", { x: padL, y: padT, width: pw, height: ph, style: "fill:transparent" }, svg);
+    var ring = el("circle", { r: 5.5, style: "fill:none;stroke:var(--ink);stroke-width:1.6;opacity:0" }, svg);
+    hit.addEventListener("mousemove", function (evt) {
+      var box = svg.getBoundingClientRect();
+      var sx = (evt.clientX - box.left) / box.width * w;
+      var sy = (evt.clientY - box.top) / box.height * h;
+      var best = null, bd = Infinity;
+      pts.forEach(function (p) {
+        var dx = X(p.y) - sx, dy = Y(p[k]) - sy, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = p; }
+      });
+      if (!best || bd > 400) { ring.style.opacity = 0; hideTip(); return; }
+      ring.setAttribute("cx", X(best.y));
+      ring.setAttribute("cy", Y(best[k]));
+      ring.style.opacity = 1;
+      showTip(evt, monthKo(best.m) + " 시작 · 금리 " + best.y.toFixed(2) + "%<br>" +
+                   hz.word + " 연평균 " + pct(best[k]));
+    });
+    hit.addEventListener("mouseleave", function () { ring.style.opacity = 0; hideTip(); });
+
+    var r = correlation(state.hz, ERAS[0].from);
+    $("chart-note").textContent =
+      "점 하나가 시작한 달 하나입니다. " + pts.length + "개월 · " +
+      "시작 금리와 " + hz.word + " 수익률의 상관계수 " +
+      (r === null ? "–" : r.toFixed(2)) + ".";
+  }
+
+  /* -------------------------------------------------------------- table */
+  function renderTable() {
+    var era = ERAS.filter(function (e) { return e.id === state.era; })[0];
+    var body = $("bucket-table").querySelector("tbody");
+    body.textContent = "";
+
+    BUCKETS.forEach(function (b) {
+      var cells = HZ.map(function (h) { return bucketStats(era.from, h.id, b.lo, b.hi); });
+      var five = cells[2];
+      var tr = document.createElement("tr");
+      if (state.rate >= b.lo && state.rate < b.hi) tr.className = "here";
+
+      var th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = b.label;
+      tr.appendChild(th);
+
+      var n = document.createElement("td");
+      n.className = "num dim";
+      n.textContent = five.n ? five.n + "개월" : "–";
+      tr.appendChild(n);
+
+      cells.forEach(function (s) {
+        var td = document.createElement("td");
+        td.className = "num " + (s.n ? signClass(s.mean) : "dim");
+        td.textContent = s.n ? pct(s.mean) : "–";
+        tr.appendChild(td);
+      });
+
+      var up = document.createElement("td");
+      up.className = "num dim";
+      up.textContent = five.n ? Math.round(five.up * 100) + "%" : "–";
+      tr.appendChild(up);
+
+      body.appendChild(tr);
+    });
+
+    $("bucket-caption").textContent =
+      era.name + " (" + era.from.replace("-", ".") + " – " +
+      DATA.meta.last.replace("-", ".") + ") · " +
+      BASIS.filter(function (x) { return x.id === state.basis; })[0].word +
+      " 연평균 총수익률 · 표본은 5년 수익률을 알 수 있는 달 수";
+  }
+
+  /* ------------------------------------------------------------- render */
+  function render() {
+    buildControls();
+    $("rate-cat").textContent = levelChip(state.rate);
+    renderVerdict();
+    renderEras();
+    renderLegend();
+    renderChart();
+    renderTable();
+  }
+
+  function boot(data) {
+    DATA = data;
+    PANEL = data.panel;
+    state.rate = data.meta.latestRate;
+
+    $("fact-obs").textContent = data.meta.count.toLocaleString("ko-KR") + "개월";
+    $("fact-range").textContent = data.meta.first.replace("-", ".") + " – " +
+                                  data.meta.last.replace("-", ".");
+    $("fact-latest").textContent = data.meta.latestRate.toFixed(2) + "% (" +
+                                   monthKo(data.meta.last) + ")";
+
+    var num = $("rate-number"), rng = $("rate-range");
+    num.value = state.rate.toFixed(2);
+    rng.value = state.rate;
+    num.addEventListener("input", function () {
+      var v = Number(num.value);
+      if (num.value === "" || isNaN(v)) return;
+      state.rate = Math.min(16, Math.max(0.5, v));
+      rng.value = state.rate;
+      render();
+    });
+    num.addEventListener("blur", function () { setRate(Number(num.value) || state.rate); });
+    rng.addEventListener("input", function () {
+      state.rate = Number(rng.value);
+      num.value = state.rate.toFixed(2);
+      render();
+    });
+
+    var timer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(timer);
+      timer = setTimeout(renderChart, 150);
+    });
+
+    render();
+  }
+
+  var inline = document.getElementById("ust10y-data");
+  if (inline) {
+    boot(JSON.parse(inline.textContent));
+  } else {
+    fetch("data/ust10y_panel.json")
+      .then(function (r) { return r.json(); })
+      .then(boot)
+      .catch(function () {
+        $("verdict").textContent =
+          "데이터를 불러오지 못했습니다. 로컬 서버로 열어 주세요: python3 -m http.server";
+      });
+  }
+})();
+
+</script>
+</body>
+</html>
